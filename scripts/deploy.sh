@@ -54,22 +54,44 @@ $VERCEL link --yes --project "$PROJECT"
 
 # --------------------------------------------------------------- env vars --
 
-# `vercel env add` fails if the variable already exists; that is fine on re-runs.
+# Stored on the project so future dashboard redeploys keep working. This is
+# best-effort: it fails when the variable already exists, which is fine. The
+# --build-env flags below are what actually guarantee this build gets them.
 push_env() {
   local name="$1" value="$2" env
   for env in production preview development; do
-    printf '%s' "$value" | $VERCEL env add "$name" "$env" >/dev/null 2>&1 || true
+    if printf '%s' "$value" | $VERCEL env add "$name" "$env" 2>&1 | tail -1; then :; fi
   done
-  echo "→ $name is set"
 }
 
+echo "→ Storing env vars on the project…"
 push_env NEXT_PUBLIC_SUPABASE_URL "$SUPABASE_URL"
 push_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$SUPABASE_KEY"
 
+echo "→ Env vars currently on the project:"
+$VERCEL env ls 2>&1 | sed 's/^/    /' || true
+
 # ----------------------------------------------------------------- deploy --
 
+# Next.js inlines NEXT_PUBLIC_* at build time, so the values must be present
+# during the build itself. Passing them as --build-env makes this deploy work
+# even if the `env add` calls above were rejected.
 echo "→ Building and deploying to production (about a minute)…"
-$VERCEL deploy --prod --yes
+$VERCEL deploy --prod --yes \
+  --build-env "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL" \
+  --build-env "NEXT_PUBLIC_SUPABASE_ANON_KEY=$SUPABASE_KEY"
+
+# ------------------------------------------------------------------ check --
+
+echo "→ Verifying the live site…"
+sleep 3
+if curl -fsS https://5star-iota.vercel.app | grep -qi "setup required"; then
+  echo
+  echo "✗ The live site still says 'Setup required' — the build did not see the"
+  echo "  Supabase variables. Send this output to Claude and it can read the"
+  echo "  Vercel build logs directly."
+  exit 1
+fi
 
 cat <<'DONE'
 
