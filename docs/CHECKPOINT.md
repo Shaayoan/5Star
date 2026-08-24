@@ -25,7 +25,8 @@ Legend: `DONE` = shipped & compiles · `WIP` = in progress · `TODO` = not start
 | 14 | Supabase wired up: schema applied, RLS hardened, auth verified live | DONE | `.env.local`, `supabase/migrations/*` |
 | 15 | Accounts: signup/signin/magic link/reset, profile + timezone persistence | DONE | `src/app/login/*`, `src/app/auth/*`, `src/app/settings/*` |
 | 16 | Pillars beyond five: add mid-season, retire, tree grows a branch | DONE | `supabase/migrations/0002_*`, `src/components/LifeTree.tsx` |
-| 17 | Deploy to Vercel | BLOCKED | see below |
+| 17 | Deploy to Vercel | DONE | live at https://5star-iota.vercel.app |
+| 18 | Connect production env vars + Supabase auth URLs | TODO | `scripts/deploy.sh` |
 
 ## Live environment
 
@@ -63,30 +64,38 @@ GET https://mxzvtrpaukvpmarrzqqr.supabase.co/auth/v1/settings
 
 `mailer_autoconfirm: true` means signup now logs straight in.
 
-## Phase 17 — deploying (blocked on a Vercel permission)
+## Production
 
-The Vercel MCP connection can read projects but **cannot create one**:
+| | |
+|---|---|
+| Vercel project | `5star` (`prj_GhXYXOjLjVLAdjoHTHHXxyiYw43z`), team `shaayoanm-9717s-projects` |
+| Production URL | https://5star-iota.vercel.app |
+| Deployed from | a drag-and-drop upload of the local `5star2` folder, not git |
+
+**The local folder (`5star2`) and the Vercel project (`5star`) have different names**, so any
+CLI command must name the project explicitly or it will create a second project:
+`vercel link --yes --project 5star`. `scripts/deploy.sh` already does this.
+
+## Phase 18 — connecting production
+
+The first deploy went up without environment variables, so the live site renders the
+"Setup required" screen. Fix with one command:
 
 ```
-403 forbidden — "You don't have permission to create a project."
+bash scripts/deploy.sh
 ```
 
-Tried on both the team scope (`team_b8Cc7ydWfftlFFUq3Si7ugYP`, hobby plan) and the personal
-scope; identical error. The only existing project is `aribid-itc`, which belongs to a
-different app — deploying into it would replace that app's production deployment, so it was
-left alone.
+That links to the existing `5star` project, pushes `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` from `.env.local`, and redeploys.
 
-**To unblock, either:**
+Then, in Supabase → **Authentication → URL Configuration**:
 
-- **A — create the project first.** Make an empty Vercel project named `5-star`. Once it
-  exists, `deploy_to_vercel` should succeed, since only *creation* is forbidden.
-- **B — deploy from the CLI.** `npx vercel link` → `npx vercel env add …` → `npx vercel --prod`.
-  Full commands in the README's Deploying section.
-- **C — re-authorize the Vercel connector** with project-creation permission, then retry.
+- **Site URL** → `https://5star-iota.vercel.app`
+- **Redirect URLs** → `https://5star-iota.vercel.app/auth/callback`
+  and `https://5star-*-shaayoanm-9717s-projects.vercel.app/auth/callback` for previews
 
-After the first successful deploy, set Supabase → **Authentication → URL Configuration** →
-**Site URL** to the deployed origin and add `https://<domain>/auth/callback` to
-**Redirect URLs**, or every emailed link bounces back to localhost.
+Neither Vercel env vars nor Supabase auth URLs are reachable from the MCP tools available
+here — the Vercel MCP has no env-var tool and the Supabase MCP has no auth-config tool.
 
 ## Resume notes
 

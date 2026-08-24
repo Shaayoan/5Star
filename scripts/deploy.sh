@@ -30,8 +30,12 @@ fi
 
 VERCEL="npx --yes vercel@latest"
 
-echo "→ Linking the Vercel project (opens a browser on first run)…"
-$VERCEL link --yes
+# The local folder is "5star2" but the Vercel project is "5star", so the project
+# has to be named explicitly — otherwise `link --yes` would create a second one.
+PROJECT="${VERCEL_PROJECT:-5star}"
+
+echo "→ Linking to Vercel project '$PROJECT' (opens a browser on first run)…"
+$VERCEL link --yes --project "$PROJECT"
 
 # `vercel env add` fails if the variable already exists; that is fine on re-runs.
 push_env() {
@@ -51,11 +55,13 @@ $VERCEL deploy --prod --yes
 
 cat <<'DONE'
 
-✓ Deployed.
+✓ Deployed — https://5star-iota.vercel.app
 
 One thing left, in Supabase → Authentication → URL Configuration:
-  • Site URL      → your new https://….vercel.app origin
-  • Redirect URLs → add https://<that-domain>/auth/callback
+  • Site URL      → https://5star-iota.vercel.app
+  • Redirect URLs → https://5star-iota.vercel.app/auth/callback
+                    https://5star-*-shaayoanm-9717s-projects.vercel.app/auth/callback
 
-Without it, magic links and password-reset emails bounce back to localhost.
+The second entry covers preview deployments. Without these, magic links and
+password-reset emails bounce back to localhost.
 DONE
