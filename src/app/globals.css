@@ -1,26 +1,130 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+
+/* 5 Star runs dark by default — a scoreboard reads better against black, and the
+   pillar colours stay saturated without fighting a white page. */
+
+@theme {
+  --color-ink-950: #07090f;
+  --color-ink-900: #0c1018;
+  --color-ink-850: #111725;
+  --color-ink-800: #161d2d;
+  --color-ink-700: #1f2839;
+  --color-ink-600: #2c3648;
+  --color-ink-400: #64748b;
+  --color-ink-300: #94a3b8;
+  --color-ink-200: #cbd5e1;
+  --color-ink-50: #f8fafc;
+
+  --color-gold-400: #fbbf24;
+  --color-gold-500: #f59e0b;
+  --color-gold-600: #d97706;
+
+  --font-display: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+  --surface: var(--color-ink-850);
+  --surface-raised: var(--color-ink-800);
+  --border: color-mix(in srgb, var(--color-ink-600) 70%, transparent);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-50);
+  -webkit-font-smoothing: antialiased;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-image:
+    radial-gradient(60rem 40rem at 15% -10%, rgba(245, 158, 11, 0.09), transparent 60%),
+    radial-gradient(50rem 35rem at 90% 0%, rgba(139, 92, 246, 0.08), transparent 55%);
+  background-attachment: fixed;
+}
+
+/* ------------------------------------------------------------- components -- */
+
+@utility card {
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  backdrop-filter: blur(12px);
+}
+
+@utility card-hover {
+  transition: border-color 150ms ease, transform 150ms ease, background 150ms ease;
+
+  &:hover {
+    border-color: color-mix(in srgb, var(--color-gold-500) 40%, var(--border));
+    transform: translateY(-1px);
+  }
+}
+
+@utility label-xs {
+  font-size: 0.6875rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-ink-400);
+  font-weight: 600;
+}
+
+@utility num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Focus ring that survives on both dark cards and gold buttons. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-gold-400);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-gold-500) 35%, transparent);
+  }
+}
+
+/* Recharts leaves an outline on the svg wrapper when clicked. */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+.animate-shimmer {
+  background-size: 200% 100%;
+  animation: shimmer 2.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop-in,
+  .animate-shimmer {
+    animation: none;
+  }
 }
