@@ -31,10 +31,16 @@ get_env() {
 
 SUPABASE_URL="$(get_env NEXT_PUBLIC_SUPABASE_URL)"
 SUPABASE_KEY="$(get_env NEXT_PUBLIC_SUPABASE_ANON_KEY)"
+# Optional: without it the app still works, /chat just shows a setup screen.
+GEMINI_KEY="$(get_env GEMINI_API_KEY)"
 
 if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
   echo "✗ .env.local is missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY." >&2
   exit 1
+fi
+
+if [ -z "$GEMINI_KEY" ]; then
+  echo "! No GEMINI_API_KEY in .env.local — the AI chat will be unavailable in production."
 fi
 
 # ------------------------------------------------------------------ login --
@@ -67,6 +73,7 @@ push_env() {
 echo "→ Storing env vars on the project…"
 push_env NEXT_PUBLIC_SUPABASE_URL "$SUPABASE_URL"
 push_env NEXT_PUBLIC_SUPABASE_ANON_KEY "$SUPABASE_KEY"
+[ -n "$GEMINI_KEY" ] && push_env GEMINI_API_KEY "$GEMINI_KEY"
 
 echo "→ Env vars currently on the project:"
 $VERCEL env ls 2>&1 | sed 's/^/    /' || true
@@ -77,9 +84,15 @@ $VERCEL env ls 2>&1 | sed 's/^/    /' || true
 # during the build itself. Passing them as --build-env makes this deploy work
 # even if the `env add` calls above were rejected.
 echo "→ Building and deploying to production (about a minute)…"
-$VERCEL deploy --prod --yes \
-  --build-env "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL" \
+BUILD_ENV=(
+  --build-env "NEXT_PUBLIC_SUPABASE_URL=$SUPABASE_URL"
   --build-env "NEXT_PUBLIC_SUPABASE_ANON_KEY=$SUPABASE_KEY"
+)
+# GEMINI_API_KEY is read at request time, not build time, so it only needs to be
+# stored on the project — but passing it here too keeps the two paths identical.
+[ -n "$GEMINI_KEY" ] && BUILD_ENV+=(--build-env "GEMINI_API_KEY=$GEMINI_KEY")
+
+$VERCEL deploy --prod --yes "${BUILD_ENV[@]}"
 
 # ------------------------------------------------------------------ check --
 
