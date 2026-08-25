@@ -128,3 +128,111 @@ body {
     animation: none;
   }
 }
+
+/* ==========================================================================
+   Motion kit
+   Everything here is CSS-only and respects prefers-reduced-motion at the end
+   of the file. A gamified app lives or dies on feedback: the moment you tap a
+   star something should move.
+   ========================================================================== */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes float-up {
+  0%   { opacity: 0; transform: translate(-50%, 6px) scale(0.85); }
+  25%  { opacity: 1; transform: translate(-50%, -6px) scale(1.05); }
+  100% { opacity: 0; transform: translate(-50%, -42px) scale(1); }
+}
+
+@keyframes pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45); }
+  50%      { box-shadow: 0 0 22px 4px rgba(245, 158, 11, 0.28); }
+}
+
+@keyframes flame {
+  0%, 100% { transform: scale(1) rotate(-2deg); }
+  50%      { transform: scale(1.14) rotate(3deg); }
+}
+
+@keyframes confetti-fall {
+  0%   { opacity: 1; transform: translate(0, 0) rotate(0deg); }
+  100% { opacity: 0; transform: translate(var(--dx), 120px) rotate(var(--spin)); }
+}
+
+@keyframes ring-sweep {
+  from { stroke-dashoffset: var(--dash-from); }
+  to   { stroke-dashoffset: var(--dash-to); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(24px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Children fade up in sequence — used for card grids on page load. */
+@utility stagger {
+  & > * {
+    animation: rise 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  & > *:nth-child(1) { animation-delay: 0ms; }
+  & > *:nth-child(2) { animation-delay: 45ms; }
+  & > *:nth-child(3) { animation-delay: 90ms; }
+  & > *:nth-child(4) { animation-delay: 135ms; }
+  & > *:nth-child(5) { animation-delay: 180ms; }
+  & > *:nth-child(6) { animation-delay: 225ms; }
+  & > *:nth-child(7) { animation-delay: 270ms; }
+  & > *:nth-child(8) { animation-delay: 315ms; }
+  & > *:nth-child(n + 9) { animation-delay: 360ms; }
+}
+
+.animate-rise { animation: rise 380ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-pop { animation: pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-float-up { animation: float-up 1100ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.animate-glow { animation: glow-pulse 2.4s ease-in-out infinite; }
+.animate-flame { animation: flame 1.6s ease-in-out infinite; display: inline-block; }
+.animate-slide-in { animation: slide-in-right 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Gold text that catches the light — for hero numbers only. */
+@utility text-shine {
+  background: linear-gradient(100deg, #fbbf24 0%, #fef3c7 45%, #f59e0b 70%, #fbbf24 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 5s linear infinite;
+}
+
+/* A card that reacts to the pointer. */
+@utility card-lift {
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 28px -18px rgba(0, 0, 0, 0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise,
+  .animate-pop,
+  .animate-float-up,
+  .animate-glow,
+  .animate-flame,
+  .animate-slide-in,
+  .stagger > * {
+    animation: none !important;
+  }
+  .card-lift:hover { transform: none; }
+}

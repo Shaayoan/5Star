@@ -3,13 +3,14 @@ import Link from 'next/link';
 import { ensureWeeklyQuests } from '@/lib/engine';
 import { requireUser } from '@/lib/auth';
 import { userToday } from '@/lib/userDate';
-import { formatDate, lastNDays } from '@/lib/dates';
+import { formatDate, greeting, lastNDays } from '@/lib/dates';
 import { getDashboardData } from '@/lib/queries';
 import { dayScore, maxDayScore } from '@/lib/game';
 import { Card, CardTitle, EmptyState, StatTile } from '@/components/ui';
 import { CheckIn } from '@/components/CheckIn';
 import { WeekBars } from '@/components/Charts';
-import { HumanLevelCard, QuestCard, RankPill, StreakCard } from '@/components/Gamification';
+import { QuestCard } from '@/components/Gamification';
+import { Hero } from '@/components/Hero';
 import { LifeTree } from '@/components/LifeTree';
 import { PageTitle, Shell } from '@/components/Shell';
 
@@ -39,18 +40,48 @@ export default async function DashboardPage() {
   return (
     <Shell active="/dashboard">
       <PageTitle
-        title={`Today · ${formatDate(data.today, { weekday: 'long', month: 'long', day: 'numeric' })}`}
+        title={formatDate(data.today, { weekday: 'long', month: 'long', day: 'numeric' })}
         subtitle={
-          loggedToday === ids.length
-            ? `All ${ids.length} logged. The week is yours to lose.`
-            : `${loggedToday} of ${ids.length} pillars logged.`
+          data.profile?.display_name
+            ? `${greeting(data.profile.timezone)}, ${data.profile.display_name}.`
+            : undefined
         }
         action={
-          <Link href="/report" className="text-sm text-gold-400 hover:underline">
-            {'This week’s report →'}
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/chat"
+              className="rounded-lg bg-ink-800 px-3 py-1.5 text-sm text-ink-200 transition-colors hover:bg-ink-700"
+            >
+              💬 Talk it through
+            </Link>
+            <Link
+              href="/report"
+              className="rounded-lg bg-ink-800 px-3 py-1.5 text-sm text-gold-400 transition-colors hover:bg-ink-700"
+            >
+              {'Report →'}
+            </Link>
+          </div>
         }
       />
+
+      <div className="mb-4 animate-rise">
+        <Hero
+          level={data.human.level}
+          levelProgress={data.human.progress}
+          xpIntoLevel={data.human.xpIntoLevel}
+          xpForNextLevel={data.human.xpForNextLevel}
+          totalXp={data.human.xp}
+          rank={data.rank}
+          streak={data.checkIn.current}
+          bestStreak={data.checkIn.best}
+          atRisk={data.checkIn.atRisk}
+          freezes={data.profile?.freezes_available ?? 0}
+          starDayStreak={data.starDays.current}
+          loggedToday={loggedToday}
+          pillarCount={ids.length}
+          balance={data.week.balance}
+        />
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <div className="space-y-4">
@@ -74,12 +105,12 @@ export default async function DashboardPage() {
             }))}
           />
 
-          <Card>
+          <Card className="card-lift">
             <CardTitle>Last seven days</CardTitle>
             <WeekBars data={bars} max={maxDayScore(ids.length)} />
           </Card>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="stagger grid gap-3 sm:grid-cols-2">
             {quests.length === 0 ? (
               <Card className="sm:col-span-2">
                 <EmptyState icon="🧭" title="Quests unlock next Monday">
@@ -95,40 +126,8 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <aside className="space-y-4">
-          <HumanLevelCard
-            level={data.human.level}
-            progress={data.human.progress}
-            xpIntoLevel={data.human.xpIntoLevel}
-            xpForNextLevel={data.human.xpForNextLevel}
-            totalXp={data.human.xp}
-          />
-
-          <RankPill rank={data.rank} />
-
-          <StreakCard
-            checkIn={data.checkIn.current}
-            best={data.checkIn.best}
-            atRisk={data.checkIn.atRisk}
-            freezes={data.profile?.freezes_available ?? 0}
-            starDays={data.starDays.current}
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <StatTile
-              label="Balance"
-              value={data.week.balance}
-              sub="7-day evenness"
-              accent={data.week.balance >= 70 ? '#10b981' : '#f59e0b'}
-            />
-            <StatTile
-              label="Avg stars"
-              value={data.week.overall.toFixed(1)}
-              sub="this week"
-            />
-          </div>
-
-          <Card className="p-2">
+        <aside className="stagger space-y-4">
+          <Card className="p-2 card-lift">
             <LifeTree
               className="w-full"
               vitality={data.week.overall / 5}
@@ -145,6 +144,20 @@ export default async function DashboardPage() {
               Your tree this week — bare branches are the pillars going quiet.
             </p>
           </Card>
+
+          <div className="grid grid-cols-2 gap-3">
+            <StatTile
+              label="Avg stars"
+              value={data.week.overall.toFixed(1)}
+              sub="this week"
+              accent="#fbbf24"
+            />
+            <StatTile
+              label="Five-star"
+              value={data.week.fiveStarDays}
+              sub="days this week"
+            />
+          </div>
         </aside>
       </div>
     </Shell>

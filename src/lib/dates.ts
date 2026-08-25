@@ -96,6 +96,29 @@ export function formatRange(start: IsoDate, end: IsoDate): string {
   return `${formatDate(start)} – ${formatDate(end, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 }
 
+/** Hour 0–23 in the given timezone, for time-of-day greetings. */
+export function hourIn(timeZone: string | null | undefined): number {
+  try {
+    return Number(
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone: timeZone ?? 'UTC',
+        hour: '2-digit',
+        hour12: false,
+      }).format(new Date()),
+    );
+  } catch {
+    return new Date().getHours();
+  }
+}
+
+export function greeting(timeZone: string | null | undefined): string {
+  const h = hourIn(timeZone);
+  if (h < 5) return 'Still up';
+  if (h < 12) return 'Morning';
+  if (h < 17) return 'Afternoon';
+  return 'Evening';
+}
+
 /** "Q3 2026" style label used to name a new season. */
 export function seasonLabel(iso: IsoDate = today()): string {
   const d = fromIso(iso);

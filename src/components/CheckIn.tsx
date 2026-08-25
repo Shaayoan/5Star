@@ -1,11 +1,13 @@
 'use client';
 
-import { useOptimistic, useState, useTransition } from 'react';
+import { useOptimistic, useRef, useState, useTransition } from 'react';
 import { setNote, setStars, toggleMicroAction } from '@/lib/actions';
 import type { IsoDate, MicroAction, StarRating } from '@/lib/types';
 import { alpha, cn } from '@/lib/utils';
-import { Chip, Progress } from '@/components/ui';
+import { Chip } from '@/components/ui';
+import { AnimatedNumber, Burst, ProgressRing, XpFloat } from '@/components/ui/Motion';
 import { StarPicker } from '@/components/StarPicker';
+import { useCelebrate } from '@/components/Celebrate';
 
 export interface CheckInPillar {
   id: string;
@@ -33,24 +35,11 @@ export function CheckIn({
   completedActionIds: string[];
 }) {
   const [done, setDone] = useState(() => new Set(completedActionIds));
-  const [celebration, setCelebration] = useState<string | null>(null);
 
   return (
-    <div className="space-y-3">
-      {celebration && (
-        <div className="animate-pop-in rounded-xl border border-gold-500/40 bg-gold-500/10 px-4 py-3 text-sm text-gold-400">
-          {celebration}
-        </div>
-      )}
+    <div className="stagger space-y-3">
       {pillars.map((p) => (
-        <PillarRow
-          key={p.id}
-          pillar={p}
-          date={date}
-          done={done}
-          setDone={setDone}
-          onCelebrate={setCelebration}
-        />
+        <PillarRow key={p.id} pillar={p} date={date} done={done} setDone={setDone} />
       ))}
     </div>
   );
@@ -61,89 +50,138 @@ function PillarRow({
   date,
   done,
   setDone,
-  onCelebrate,
 }: {
   pillar: CheckInPillar;
   date: IsoDate;
   done: Set<string>;
   setDone: (s: Set<string>) => void;
-  onCelebrate: (msg: string | null) => void;
 }) {
   const [pending, startTransition] = useTransition();
+  const { celebrate, celebrateBadges } = useCelebrate();
+
   const [stars, optimisticStars] = useOptimistic(
     pillar.todayStars,
     (_: StarRating, next: StarRating) => next,
   );
+
   const [noteOpen, setNoteOpen] = useState(Boolean(pillar.todayNote));
   const [note, setLocalNote] = useState(pillar.todayNote ?? '');
+  const [xpFloat, setXpFloat] = useState<{ amount: number; id: number } | null>(null);
+  const [burst, setBurst] = useState(0);
+  const floatId = useRef(0);
+
+  const rated = stars > 0;
 
   const handleStars = (value: StarRating) => {
+    // Show the reward before the round trip — the tap should feel instant.
+    if (value > 0) {
+      setXpFloat({ amount: value * 10, id: ++floatId.current });
+      setBurst((b) => b + 1);
+    }
+
     startTransition(async () => {
       optimisticStars(value);
       const result = await setStars(pillar.id, date, value);
-      if (result.perfectDay) onCelebrate('Flawless day — every pillar at 5★. +100 XP');
-      else if (result.fiveStarDay) onCelebrate('Five-star day. +50 XP');
-      else if (result.newBadges.length) onCelebrate(`Badge unlocked: ${result.newBadges.join(', ')}`);
-      else onCelebrate(null);
+
+      if (result.perfectDay) {
+        celebrate({
+          tone: 'star',
+          icon: '💎',
+          title: 'Flawless day',
+          detail: 'Every pillar at 5★ · +100 XP',
+        });
+      } else if (result.fiveStarDay) {
+        celebrate({
+          tone: 'star',
+          icon: '⭐',
+          title: 'Five-star day',
+          detail: 'Every pillar at 4★ or better · +50 XP',
+        });
+      }
+
+      if (result.completedQuests.length > 0) {
+        celebrate({
+          tone: 'quest',
+          icon: '🧭',
+          title: 'Quest complete',
+          detail: 'Reward added to your XP',
+        });
+      }
+
+      celebrateBadges(result.newBadges);
     });
   };
 
   const handleAction = (action: MicroAction) => {
+    const adding = !done.has(action.id);
+    if (adding) setXpFloat({ amount: action.xp_value, id: ++floatId.current });
+
     startTransition(async () => {
       const next = new Set(done);
-      if (next.has(action.id)) next.delete(action.id);
-      else next.add(action.id);
+      if (adding) next.add(action.id);
+      else next.delete(action.id);
       setDone(next);
       await toggleMicroAction(action.id, date);
     });
   };
 
-  const saveNote = () => {
+  const saveNote = () =>
     startTransition(async () => {
       await setNote(pillar.id, date, note);
     });
-  };
 
   return (
     <div
-      className={cn('card card-hover p-4 transition-opacity', pending && 'opacity-70')}
-      style={{
-        borderColor: stars > 0 ? alpha(pillar.color, 0.45) : undefined,
-        background: stars > 0 ? alpha(pillar.color, 0.05) : undefined,
-      }}
+      className={cn('card card-lift relative p-4', pending && 'opacity-80')}
+      style={
+        rated
+          ? {
+              borderColor: alpha(pillar.color, 0.5),
+              background: `linear-gradient(135deg, ${alpha(pillar.color, 0.1)}, transparent 60%)`,
+              boxShadow: `0 0 30px -14px ${alpha(pillar.color, 0.9)}`,
+            }
+          : undefined
+      }
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <span
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-xl"
-            style={{ background: alpha(pillar.color, 0.16), border: `1px solid ${alpha(pillar.color, 0.3)}` }}
-          >
-            {pillar.icon}
-          </span>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
+          {/* The level ring doubles as the pillar's identity badge. */}
+          <div className="relative shrink-0">
+            <ProgressRing
+              progress={pillar.levelProgress}
+              size={52}
+              stroke={4}
+              color={pillar.color}
+            >
+              <span className="text-xl leading-none">{pillar.icon}</span>
+            </ProgressRing>
+            <Burst trigger={burst} count={12} />
+            {xpFloat && <XpFloat amount={xpFloat.amount} id={xpFloat.id} />}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
               <p className="truncate font-semibold">{pillar.name}</p>
               <Chip tone="neutral" className="shrink-0">
                 Lv {pillar.level}
               </Chip>
               {pillar.streak > 0 && (
                 <Chip tone="gold" className="shrink-0">
-                  🔥 {pillar.streak}
+                  <span className="animate-flame">🔥</span> {pillar.streak}
                 </Chip>
               )}
             </div>
             <p className="truncate text-xs text-ink-400">{pillar.definition}</p>
+            <p className="num mt-0.5 text-[11px] text-ink-400">
+              <AnimatedNumber value={pillar.xpIntoLevel} /> / {pillar.xpForNextLevel} XP to level{' '}
+              {pillar.level + 1}
+            </p>
           </div>
         </div>
 
-        <StarPicker value={stars} onChange={handleStars} color={pillar.color} disabled={pending} />
-      </div>
-
-      <div className="mt-3">
-        <Progress value={pillar.levelProgress} color={pillar.color} height={5} />
-        <p className="mt-1 text-[11px] text-ink-400 num">
-          {pillar.xpIntoLevel} / {pillar.xpForNextLevel} XP to level {pillar.level + 1}
-        </p>
+        <div className="shrink-0">
+          <StarPicker value={stars} onChange={handleStars} color={pillar.color} disabled={pending} />
+        </div>
       </div>
 
       {pillar.actions.length > 0 && (
@@ -156,18 +194,18 @@ function PillarRow({
                 type="button"
                 onClick={() => handleAction(a)}
                 className={cn(
-                  'rounded-full px-3 py-1 text-xs transition-colors',
+                  'rounded-full px-3 py-1 text-xs transition-all active:scale-95',
                   isDone ? 'font-medium' : 'text-ink-300 hover:text-ink-50',
                 )}
                 style={{
                   background: isDone ? alpha(pillar.color, 0.2) : 'var(--color-ink-800)',
                   color: isDone ? pillar.color : undefined,
-                  border: `1px solid ${isDone ? alpha(pillar.color, 0.4) : 'transparent'}`,
+                  border: `1px solid ${isDone ? alpha(pillar.color, 0.45) : 'transparent'}`,
                 }}
               >
                 {isDone ? '✓ ' : ''}
                 {a.label}
-                <span className="ml-1 text-ink-400">+{a.xp_value}</span>
+                <span className="ml-1 opacity-60">+{a.xp_value}</span>
               </button>
             );
           })}
@@ -183,13 +221,13 @@ function PillarRow({
             rows={2}
             maxLength={280}
             placeholder="What actually happened?"
-            className="w-full resize-none rounded-lg border border-[var(--border)] bg-ink-900/70 px-3 py-2 text-sm outline-none placeholder:text-ink-400"
+            className="w-full resize-none rounded-lg border border-[var(--border)] bg-ink-900/70 px-3 py-2 text-sm outline-none transition-colors placeholder:text-ink-400 focus:border-gold-500/50"
           />
         ) : (
           <button
             type="button"
             onClick={() => setNoteOpen(true)}
-            className="text-xs text-ink-400 hover:text-ink-200"
+            className="text-xs text-ink-400 transition-colors hover:text-ink-200"
           >
             + Add a note
           </button>

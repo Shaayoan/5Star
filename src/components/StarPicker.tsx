@@ -24,7 +24,13 @@ export function StarPicker({
   const [hover, setHover] = useState<number | null>(null);
   const shown = hover ?? value;
 
-  const dims = { sm: 'h-6 w-6 text-lg', md: 'h-9 w-9 text-2xl', lg: 'h-11 w-11 text-3xl' }[size];
+  // Five stars at 36px plus a 88px label is 268px, which overflows a narrow
+  // phone on its own — so both the stars and the label shrink down there.
+  const dims = {
+    sm: 'h-6 w-6 text-lg',
+    md: 'h-7 w-7 text-xl sm:h-9 sm:w-9 sm:text-2xl',
+    lg: 'h-9 w-9 text-2xl sm:h-11 sm:w-11 sm:text-3xl',
+  }[size];
 
   return (
     <div className="flex items-center gap-2">
@@ -44,18 +50,26 @@ export function StarPicker({
             // undo an accidental log without a separate control.
             onClick={() => onChange((value === n ? 0 : n) as StarRating)}
             className={cn(
-              'grid place-items-center rounded-md leading-none transition-transform',
-              'disabled:pointer-events-none hover:scale-110 active:scale-95',
+              'grid place-items-center rounded-md leading-none',
+              'transition-transform duration-150 ease-out',
+              'disabled:pointer-events-none hover:scale-125 active:scale-90',
+              n <= shown && 'drop-shadow-[0_0_6px_currentColor]',
               dims,
             )}
-            style={{ color: n <= shown ? color : 'var(--color-ink-600)' }}
+            style={{
+              color: n <= shown ? color : 'var(--color-ink-600)',
+              // Filled stars settle in sequence, so a 5★ rating cascades.
+              transitionDelay: n <= shown ? `${(n - 1) * 25}ms` : '0ms',
+            }}
           >
             {n <= shown ? '★' : '☆'}
           </button>
         ))}
       </div>
       {showLabel && (
-        <span className="text-xs text-ink-400 min-w-[5.5rem]">{LABELS[shown] ?? ''}</span>
+        <span className="hidden text-xs text-ink-400 sm:inline sm:min-w-[5.5rem]">
+          {LABELS[shown] ?? ''}
+        </span>
       )}
     </div>
   );
