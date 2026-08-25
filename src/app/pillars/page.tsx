@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { requireUser } from '@/lib/auth';
+import { userToday } from '@/lib/userDate';
 import { formatDate } from '@/lib/dates';
 import { getDashboardData } from '@/lib/queries';
 import { Card, Chip } from '@/components/ui';
@@ -8,7 +9,7 @@ import { PillarManager } from './PillarManager';
 
 export default async function PillarsPage() {
   const { db, user } = await requireUser();
-  const data = await getDashboardData(db, user.id);
+  const data = await getDashboardData(db, user.id, await userToday(db, user.id));
   if (data.pillars.length === 0) redirect('/onboarding');
 
   const stats = Object.fromEntries(

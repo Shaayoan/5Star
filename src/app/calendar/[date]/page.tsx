@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { requireUser } from '@/lib/auth';
-import { addDays, daysBetween, formatDate, today as todayIso } from '@/lib/dates';
+import { userToday } from '@/lib/userDate';
+import { addDays, daysBetween, formatDate } from '@/lib/dates';
 import {
   getActionLogDates,
   getActivePillars,
@@ -27,10 +28,9 @@ export default async function DayPage({
   const { date } = await params;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) notFound();
 
-  const today = todayIso();
-  if (date > today) redirect('/calendar');
-
   const { db, user } = await requireUser();
+  const today = await userToday(db, user.id);
+  if (date > today) redirect('/calendar');
 
   const pillars = await getActivePillars(db, user.id);
   if (pillars.length === 0) redirect('/onboarding');

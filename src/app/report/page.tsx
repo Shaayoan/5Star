@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requireUser } from '@/lib/auth';
+import { userToday } from '@/lib/userDate';
 import {
   addDays,
   formatDate,
   formatRange,
   lastNDays,
-  today as todayIso,
+
   weekStart,
 } from '@/lib/dates';
 import { getActivePillars, getEntries, getQuests } from '@/lib/queries';
@@ -39,7 +40,8 @@ export default async function ReportPage({
   const pillars = await getActivePillars(db, user.id);
   if (pillars.length === 0) redirect('/onboarding');
 
-  const thisWeek = weekStart(todayIso());
+  const userNow = await userToday(db, user.id);
+  const thisWeek = weekStart(userNow);
   const start = params.w && /^\d{4}-\d{2}-\d{2}$/.test(params.w) ? weekStart(params.w) : thisWeek;
   const end = addDays(start, 6);
   const isCurrentWeek = start === thisWeek;
@@ -70,7 +72,7 @@ export default async function ReportPage({
     week,
     previous,
     pillars,
-    checkInStreak: checkInStreak(entries, ids, isCurrentWeek ? todayIso() : end).current,
+    checkInStreak: checkInStreak(entries, ids, isCurrentWeek ? userNow : end).current,
     questsCompleted: questsDone,
     newBadges: [],
   });

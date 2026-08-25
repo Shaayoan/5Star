@@ -1,7 +1,7 @@
 import { GoogleGenAI, type Content, type Part } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
-import { today as todayIso } from '@/lib/dates';
+import { userToday } from '@/lib/userDate';
 import { getChatContext, loadChatSession, saveChatSession } from '@/lib/ai/context';
 import { buildSystemPrompt } from '@/lib/ai/prompt';
 import { CHAT_TOOLS, toProposal, type Proposal } from '@/lib/ai/tools';
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   const message = typeof body.message === 'string' ? body.message.trim().slice(0, 2000) : '';
   if (!message) return NextResponse.json({ error: 'Say something first.' }, { status: 400 });
 
-  const date = todayIso();
+  const date = await userToday(db, user.id);
   const ctx = await getChatContext(db, user.id, date);
 
   if (ctx.pillars.length === 0) {

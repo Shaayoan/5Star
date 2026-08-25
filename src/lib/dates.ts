@@ -16,8 +16,36 @@ export function fromIso(iso: IsoDate): Date {
   return new Date(y, m - 1, d);
 }
 
+/** "Today" according to the machine running this code. On a browser that is the
+ *  user's own clock; on Vercel it is UTC, which is why server code must use
+ *  `todayIn` with the user's stored timezone instead. */
 export function today(): IsoDate {
   return toIso(new Date());
+}
+
+/**
+ * "Today" in a specific IANA timezone, e.g. `Asia/Dubai`.
+ *
+ * A check-in belongs to the user's calendar day, not the server's. Rendering the
+ * dashboard with the server's date meant anyone east of UTC saw yesterday for
+ * the first hours of their morning, and logs written then landed on the wrong
+ * day — which streaks, the calendar and the weekly report all inherited.
+ *
+ * `en-CA` is used because it formats as `YYYY-MM-DD`.
+ */
+export function todayIn(timeZone: string | null | undefined): IsoDate {
+  if (!timeZone) return today();
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    // An unknown zone should never take the app down.
+    return today();
+  }
 }
 
 export function addDays(iso: IsoDate, n: number): IsoDate {

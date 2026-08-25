@@ -81,8 +81,12 @@ export async function ensureProfileRow(
  * Creates this week's quests if they do not exist yet. Idempotent, and safe to
  * call from a page render.
  */
-export async function ensureWeeklyQuests(db: DB, userId: string): Promise<Quest[]> {
-  const week = weekStart();
+export async function ensureWeeklyQuests(
+  db: DB,
+  userId: string,
+  anchor: IsoDate = todayIso(),
+): Promise<Quest[]> {
+  const week = weekStart(anchor);
   const existing = await getQuests(db, userId, week);
   if (existing.length > 0) return existing;
 
@@ -179,8 +183,9 @@ export async function recompute(
   userId: string,
   pillars: UserPillar[],
   date: IsoDate = todayIso(),
+  /** The user's own calendar day, for streak maths. */
+  anchor: IsoDate = todayIso(),
 ): Promise<RecomputeResult> {
-  const anchor = todayIso();
   const ids = pillars.map((p) => p.id);
   const entries = await getEntries(db, userId, addDays(anchor, -(HISTORY - 1)), anchor);
   const byDate = new Map(entries.map((e) => [e.date, e]));

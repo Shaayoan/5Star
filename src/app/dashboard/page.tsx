@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ensureWeeklyQuests } from '@/lib/engine';
 import { requireUser } from '@/lib/auth';
+import { userToday } from '@/lib/userDate';
 import { formatDate, lastNDays } from '@/lib/dates';
 import { getDashboardData } from '@/lib/queries';
 import { dayScore, maxDayScore } from '@/lib/game';
@@ -14,13 +15,13 @@ import { PageTitle, Shell } from '@/components/Shell';
 
 export default async function DashboardPage() {
   const { db, user } = await requireUser();
-  const data = await getDashboardData(db, user.id);
+  const data = await getDashboardData(db, user.id, await userToday(db, user.id));
 
   if (data.pillars.length === 0) redirect('/onboarding');
 
   // Idempotent — creates this week's quests the first time the dashboard is
   // opened after Monday, and does nothing on every later visit.
-  const quests = data.quests.length ? data.quests : await ensureWeeklyQuests(db, user.id);
+  const quests = data.quests.length ? data.quests : await ensureWeeklyQuests(db, user.id, data.today);
 
   const ids = data.pillars.map((p) => p.id);
   const weekDates = lastNDays(7, data.today);

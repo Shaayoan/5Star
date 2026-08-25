@@ -25,6 +25,7 @@ import {
   getProfile,
   type DB,
 } from './queries';
+import { userToday } from './userDate';
 import type { IsoDate, Quest, StarRating } from './types';
 
 /* --------------------------------------------------------------- profile -- */
@@ -272,7 +273,7 @@ export async function setStars(
     await grantLogXp(db, user.id, pillarId, date, stars);
   }
 
-  const result = await recompute(db, user.id, pillars, date);
+  const result = await recompute(db, user.id, pillars, date, await userToday(db, user.id));
   revalidatePath('/dashboard');
   revalidatePath('/calendar', 'layout');
   return result;
@@ -391,7 +392,7 @@ export async function commitProposals(items: CommitItem[], date: IsoDate) {
     }
   }
 
-  const result = await recompute(db, user.id, pillars, date);
+  const result = await recompute(db, user.id, pillars, date, await userToday(db, user.id));
 
   revalidatePath('/dashboard');
   revalidatePath('/chat');
@@ -468,7 +469,7 @@ export async function deleteMicroAction(actionId: string) {
  *  directly — it does the same work without revalidating. */
 export async function ensureQuests(): Promise<Quest[]> {
   const { db, user } = await requireUser();
-  const quests = await ensureWeeklyQuests(db, user.id);
+  const quests = await ensureWeeklyQuests(db, user.id, await userToday(db, user.id));
   revalidatePath('/dashboard');
   return quests;
 }

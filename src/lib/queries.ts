@@ -247,8 +247,13 @@ export interface DashboardData {
  * One assembly point for everything the dashboard, report and pillar pages
  * render. Four queries total; all the derived numbers come from `lib/game`.
  */
-export async function getDashboardData(db: DB, userId: string): Promise<DashboardData> {
-  const anchor = todayIso();
+export async function getDashboardData(
+  db: DB,
+  userId: string,
+  /** The user's own calendar day — see lib/userDate.ts. Defaults to the
+   *  server's, which is only correct in development. */
+  anchor: IsoDate = todayIso(),
+): Promise<DashboardData> {
   const from = addDays(anchor, -(HISTORY_DAYS - 1));
 
   const [profile, season, pillars, entries, xp, badgeKeys, actions, completedActionIds] =

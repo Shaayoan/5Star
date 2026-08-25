@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { requireUser } from '@/lib/auth';
+import { userToday } from '@/lib/userDate';
 import {
   addDays,
   dayLabel,
@@ -8,7 +9,7 @@ import {
   fromIso,
   rangeDates,
   toIso,
-  today as todayIso,
+
 } from '@/lib/dates';
 import { getActivePillars, getCalendarDays } from '@/lib/queries';
 import { dayScore, isFiveStarDay, isLoggedDay, maxDayScore } from '@/lib/game';
@@ -39,7 +40,7 @@ export default async function CalendarPage({
   const pillars = await getActivePillars(db, user.id);
   if (pillars.length === 0) redirect('/onboarding');
 
-  const today = todayIso();
+  const today = await userToday(db, user.id);
   const anchor =
     params.m && /^\d{4}-\d{2}$/.test(params.m) ? `${params.m}-01` : monthStart(today);
 
