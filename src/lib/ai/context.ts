@@ -1,5 +1,5 @@
 import 'server-only';
-import type Anthropic from '@anthropic-ai/sdk';
+import type { Content } from '@google/genai';
 import { addDays, lastNDays, weekStart } from '../dates';
 import {
   getActionLogDates,
@@ -68,13 +68,13 @@ export async function loadChatSession(
   db: DB,
   userId: string,
   date: IsoDate,
-): Promise<Anthropic.MessageParam[]> {
+): Promise<Content[]> {
   const { data } = await db
     .from('chat_sessions')
     .select('messages')
     .eq('user_id', userId)
     .eq('log_date', date)
-    .maybeSingle<{ messages: Anthropic.MessageParam[] }>();
+    .maybeSingle<{ messages: Content[] }>();
 
   return Array.isArray(data?.messages) ? data.messages : [];
 }
@@ -83,7 +83,7 @@ export async function saveChatSession(
   db: DB,
   userId: string,
   date: IsoDate,
-  messages: Anthropic.MessageParam[],
+  messages: Content[],
 ) {
   await db.from('chat_sessions').upsert(
     { user_id: userId, log_date: date, messages },
@@ -96,27 +96,22 @@ export async function clearChatSession(db: DB, userId: string, date: IsoDate) {
 }
 
 /** Plain text of the day's conversation, for showing history when the page
- *  reloads. Tool blocks are dropped — the user only cares about what was said. */
+ *  reloads. Function-call and function-response parts are dropped — the user
+ *  only cares about what was actually said. */
 export function transcriptOf(
-  messages: Anthropic.MessageParam[],
+  messages: Content[],
 ): { role: 'user' | 'assistant'; text: string }[] {
   const out: { role: 'user' | 'assistant'; text: string }[] = [];
 
   for (const m of messages) {
-    // Only the two conversational roles are ever rendered; anything else stored
-    // in the transcript is scaffolding the user never needs to see.
-    if (m.role !== 'user' && m.role !== 'assistant') continue;
-    const role = m.role;
+    // Gemini calls the assistant "model"; the UI calls it "assistant".
+    const role = m.role === 'model' ? 'assistant' : 'user';
 
-    if (typeof m.content === 'string') {
-      if (m.content.trim()) out.push({ role, text: m.content });
-      continue;
-    }
-    const text = m.content
-      .filter((b) => b.type === 'text')
-      .map((b) => (b as { text: string }).text)
+    const text = (m.parts ?? [])
+      .map((p) => p.text ?? '')
       .join('')
       .trim();
+
     if (text) out.push({ role, text });
   }
 

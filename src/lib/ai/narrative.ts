@@ -1,9 +1,9 @@
 import 'server-only';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
 import { formatDate } from '../dates';
 import type { DayEntry, UserPillar } from '../types';
 import type { WindowSummary } from '../game';
-import { ANTHROPIC_API_KEY, NARRATIVE_MAX_TOKENS, NARRATIVE_MODEL } from './config';
+import { GEMINI_API_KEY, NARRATIVE_MAX_TOKENS, NARRATIVE_MODEL } from './config';
 
 /**
  * The deeper weekly write-up.
@@ -56,12 +56,9 @@ export async function writeWeeklyNarrative(input: AiNarrativeInput): Promise<str
     })
     .join('\n');
 
-  const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
-  const response = await anthropic.messages.create({
-    model: NARRATIVE_MODEL,
-    max_tokens: NARRATIVE_MAX_TOKENS,
-    system: `You write one honest weekly review for a user of 5 Star, a life-balance tracker.
+  const systemInstruction = `You write one honest weekly review for a user of 5 Star, a life-balance tracker.
 
 Rules that matter more than style:
 - Use ONLY the numbers and notes given to you. Never invent an activity, a number or a
@@ -75,11 +72,17 @@ Rules that matter more than style:
 - End with one concrete thing to change next week, drawn from the notes.
 
 Format: 3 to 5 short paragraphs, plain prose. No headings, no bullet points, no markdown.
-Around 200 words. Never mention that you are an AI or refer to "the data provided".`,
-    messages: [
+Around 200 words. Never mention that you are an AI or refer to "the data provided".`;
+
+  const response = await ai.models.generateContent({
+    model: NARRATIVE_MODEL,
+    config: { systemInstruction, maxOutputTokens: NARRATIVE_MAX_TOKENS },
+    contents: [
       {
         role: 'user',
-        content: `${displayName ? `The user is ${displayName}. ` : ''}Here is their week.
+        parts: [
+          {
+            text: `${displayName ? `The user is ${displayName}. ` : ''}Here is their week.
 
 Overall: ${week.overall.toFixed(1)}★ average, balance score ${week.balance}/100, ${
           week.loggedDays
@@ -91,13 +94,13 @@ ${stats}
 
 Every rating they logged, with the note they wrote at the time:
 ${notesBlock(entries, pillars)}`,
+          },
+        ],
       },
     ],
   });
 
-  return response.content
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as { text: string }).text)
-    .join('')
-    .trim();
+  const text = (response.text ?? '').trim();
+  if (!text) throw new Error('The model returned an empty review.');
+  return text;
 }

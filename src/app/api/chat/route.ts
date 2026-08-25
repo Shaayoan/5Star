@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI, type Content, type Part } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
 import { today as todayIso } from '@/lib/dates';
@@ -6,9 +6,9 @@ import { getChatContext, loadChatSession, saveChatSession } from '@/lib/ai/conte
 import { buildSystemPrompt } from '@/lib/ai/prompt';
 import { CHAT_TOOLS, toProposal, type Proposal } from '@/lib/ai/tools';
 import {
-  ANTHROPIC_API_KEY,
   CHAT_MAX_TOKENS,
   CHAT_MODEL,
+  GEMINI_API_KEY,
   MAX_HISTORY_MESSAGES,
   MAX_TOOL_ROUNDS,
   isAiConfigured,
@@ -19,7 +19,7 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   if (!isAiConfigured) {
     return NextResponse.json(
-      { error: 'The chat needs an ANTHROPIC_API_KEY to be set on the server.' },
+      { error: 'The chat needs a GEMINI_API_KEY to be set on the server.' },
       { status: 503 },
     );
   }
@@ -47,63 +47,67 @@ export async function POST(request: Request) {
   }
 
   const history = await loadChatSession(db, user.id, date);
-  const messages: Anthropic.MessageParam[] = [
+  const contents: Content[] = [
     ...history.slice(-MAX_HISTORY_MESSAGES),
-    { role: 'user', content: message },
+    { role: 'user', parts: [{ text: message }] },
   ];
 
-  const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
-  const system = buildSystemPrompt(ctx);
+  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+  const systemInstruction = buildSystemPrompt(ctx);
 
   const proposals: Proposal[] = [];
   let reply = '';
 
   try {
-    // The model may call several tools before it has anything to say, so the
-    // request/tool-result exchange repeats until it produces a plain answer.
+    // The model may call several functions before it has anything to say, so the
+    // request / function-response exchange repeats until it produces prose.
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const response = await anthropic.messages.create({
+      const response = await ai.models.generateContent({
         model: CHAT_MODEL,
-        max_tokens: CHAT_MAX_TOKENS,
-        system,
-        tools: CHAT_TOOLS,
-        messages,
+        contents,
+        config: {
+          systemInstruction,
+          maxOutputTokens: CHAT_MAX_TOKENS,
+          tools: [{ functionDeclarations: CHAT_TOOLS }],
+        },
       });
 
-      for (const block of response.content) {
-        if (block.type === 'text') reply += block.text;
-      }
+      if (response.text) reply += response.text;
 
-      const toolUses = response.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use',
-      );
+      const calls = response.functionCalls ?? [];
 
-      messages.push({ role: 'assistant', content: response.content });
+      // Echo the model's own turn back verbatim so it keeps its context.
+      const modelParts: Part[] = [
+        ...(response.text ? [{ text: response.text }] : []),
+        ...calls.map((c) => ({ functionCall: c })),
+      ];
+      if (modelParts.length > 0) contents.push({ role: 'model', parts: modelParts });
 
-      if (toolUses.length === 0 || response.stop_reason !== 'tool_use') break;
+      if (calls.length === 0) break;
 
-      const results: Anthropic.ToolResultBlockParam[] = [];
-      for (const use of toolUses) {
-        const proposal = toProposal(use.name, use.input);
+      const results: Part[] = [];
+      for (const call of calls) {
+        const name = call.name ?? '';
+        const proposal = toProposal(name, call.args);
         if (proposal) proposals.push(proposal);
         results.push({
-          type: 'tool_result',
-          tool_use_id: use.id,
-          content: proposal
-            ? 'Noted as a proposal. The user has not confirmed it yet.'
-            : 'Rejected — the arguments did not match the schema.',
-          is_error: !proposal,
+          functionResponse: {
+            name,
+            response: proposal
+              ? { status: 'Noted as a proposal. The user has not confirmed it yet.' }
+              : { error: 'Rejected — the arguments did not match the schema.' },
+          },
         });
       }
 
-      messages.push({ role: 'user', content: results });
+      contents.push({ role: 'user', parts: results });
     }
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `The model call failed: ${detail}` }, { status: 502 });
   }
 
-  await saveChatSession(db, user.id, date, messages);
+  await saveChatSession(db, user.id, date, contents);
 
   // Later proposals for the same pillar supersede earlier ones, so the user sees
   // one row per pillar rather than a running argument with itself.

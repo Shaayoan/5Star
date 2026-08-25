@@ -532,7 +532,7 @@ export async function generateReport(date: IsoDate = todayIso()) {
  *  narrative is what renders by default. */
 export async function generateAiNarrative(weekStartIso: IsoDate) {
   const { db, user } = await requireUser();
-  if (!isAiConfigured) throw new Error('The server has no ANTHROPIC_API_KEY set.');
+  if (!isAiConfigured) throw new Error('The server has no GEMINI_API_KEY set.');
 
   const start = weekStart(weekStartIso);
   const end = addDays(start, 6);

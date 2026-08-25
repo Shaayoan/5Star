@@ -220,8 +220,8 @@ people most often want out.
 
 ### Model split
 
-`claude-haiku-4-5` for the extraction loop: frequent, latency-sensitive, cheap.
-`claude-sonnet-4-5` for the weekly review: once a week, over a whole week of notes, and the
+`gemini-2.5-flash` for the extraction loop: frequent, latency-sensitive, cheap.
+`gemini-2.5-pro` for the weekly review: once a week, over a whole week of notes, and the
 thing people actually read.
 
 The weekly review stays **opt-in per week**. The rule-based narrative (§9) remains the

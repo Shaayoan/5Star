@@ -51,10 +51,10 @@ export default async function ChatPage() {
           <ol className="mt-4 space-y-2 text-sm text-ink-300">
             <li>
               1. Create a key at{' '}
-              <span className="text-gold-400">console.anthropic.com</span>.
+              <span className="text-gold-400">aistudio.google.com/apikey</span>.
             </li>
             <li>
-              2. Add <code className="rounded bg-ink-800 px-1.5 py-0.5">ANTHROPIC_API_KEY</code>{' '}
+              2. Add <code className="rounded bg-ink-800 px-1.5 py-0.5">GEMINI_API_KEY</code>{' '}
               to <code className="rounded bg-ink-800 px-1.5 py-0.5">.env.local</code>, and to
               the Vercel project for production.
             </li>
