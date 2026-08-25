@@ -8,6 +8,7 @@ import { CHAT_TOOLS, toProposal, type Proposal } from '@/lib/ai/tools';
 import {
   CHAT_MAX_TOKENS,
   CHAT_MODEL,
+  CHAT_THINKING_LEVEL,
   GEMINI_API_KEY,
   MAX_HISTORY_MESSAGES,
   MAX_TOOL_ROUNDS,
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
         config: {
           systemInstruction,
           maxOutputTokens: CHAT_MAX_TOKENS,
+          thinkingConfig: { thinkingLevel: CHAT_THINKING_LEVEL },
           tools: [{ functionDeclarations: CHAT_TOOLS }],
         },
       });

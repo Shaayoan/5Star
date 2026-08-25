@@ -1,3 +1,5 @@
+import { ThinkingLevel } from '@google/genai';
+
 /** Model choice by job, per docs/FORMULAS.md §12.
  *
  *  The extraction loop runs on every chat message — frequent, latency-sensitive
@@ -19,10 +21,19 @@ export const CHAT_MODEL = process.env.GEMINI_CHAT_MODEL ?? 'gemini-3.6-flash';
  *  GEMINI_NARRATIVE_MODEL=gemini-3.1-pro-preview for noticeably better reviews. */
 export const NARRATIVE_MODEL = process.env.GEMINI_NARRATIVE_MODEL ?? 'gemini-3.6-flash';
 
-/** Chat replies are short by design; the model should ask one question, not
- *  deliver an essay. */
-export const CHAT_MAX_TOKENS = 700;
-export const NARRATIVE_MAX_TOKENS = 900;
+/**
+ * Gemini 3 counts *thinking* tokens against `maxOutputTokens`. A 700-token cap
+ * looked generous for a two-sentence reply but was spending ~670 of it on
+ * internal reasoning, leaving nothing for the function calls — the chat replied
+ * politely and extracted nothing. The budget has to cover thinking as well as
+ * the answer.
+ */
+export const CHAT_MAX_TOKENS = 2000;
+export const NARRATIVE_MAX_TOKENS = 3000;
+
+/** Extraction is a shallow task; low thinking keeps it fast and leaves room for
+ *  the tool calls. The weekly review is the opposite — it should think. */
+export const CHAT_THINKING_LEVEL = ThinkingLevel.LOW;
 
 /** Guard against a tool loop that never settles. */
 export const MAX_TOOL_ROUNDS = 6;
