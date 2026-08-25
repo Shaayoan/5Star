@@ -22,6 +22,8 @@ import { Card, CardDescription, CardTitle, Chip, EmptyState, StatTile } from '@/
 import { StarDisplay } from '@/components/StarPicker';
 import { PageTitle, Shell } from '@/components/Shell';
 import { dayScore } from '@/lib/game';
+import { buildSeries } from '@/lib/game/series';
+import { TrendChart } from '@/components/TrendChart';
 import { isAiConfigured } from '@/lib/ai/config';
 import { alpha } from '@/lib/utils';
 import { DeepReview } from './DeepReview';
@@ -42,8 +44,10 @@ export default async function ReportPage({
   const end = addDays(start, 6);
   const isCurrentWeek = start === thisWeek;
 
-  // Pull three weeks so the comparison and the streak both have context.
-  const entries = await getEntries(db, user.id, addDays(start, -30), end);
+  // Pull a year for the trend chart; the weekly figures slice out of the same
+  // array, so this is still one query.
+  const entries = await getEntries(db, user.id, addDays(end, -364), end);
+  const series = buildSeries(entries, pillars);
   const inWeek = entries.filter((e) => e.date >= start && e.date <= end);
   const inPrev = entries.filter((e) => e.date >= addDays(start, -7) && e.date < start);
 
@@ -148,6 +152,16 @@ export default async function ReportPage({
             />
             <StatTile label="Five-star days" value={week.fiveStarDays} sub={`${week.perfectDays} flawless`} accent="#fbbf24" />
           </div>
+
+          <Card>
+            <CardTitle>The long view</CardTitle>
+            <CardDescription>
+              Every line is a 7-day average, so this shows the trend rather than the noise.
+            </CardDescription>
+            <div className="mt-4">
+              <TrendChart points={series} pillars={pillars} />
+            </div>
+          </Card>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>

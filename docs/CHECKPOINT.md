@@ -26,6 +26,9 @@ Legend: `DONE` = shipped & compiles · `WIP` = in progress · `TODO` = not start
 | 15 | Accounts: signup/signin/magic link/reset, profile + timezone persistence | DONE | `src/app/login/*`, `src/app/auth/*`, `src/app/settings/*` |
 | 16 | Pillars beyond five: add mid-season, retire, tree grows a branch | DONE | `supabase/migrations/0002_*`, `src/components/LifeTree.tsx` |
 | 17 | Deploy to Vercel | DONE | live at https://5star-iota.vercel.app |
+| 19 | v2 conversational logging (Gemini) | DONE | , , migration 0004 |
+| 20 | Calendar with click-to-backfill | DONE | ,  |
+| 21 | Trend chart on the report | DONE | ,  |
 | 18 | Connect production env vars + Supabase auth URLs | TODO | `scripts/deploy.sh` |
 
 ## Live environment

@@ -274,6 +274,7 @@ export async function setStars(
 
   const result = await recompute(db, user.id, pillars, date);
   revalidatePath('/dashboard');
+  revalidatePath('/calendar', 'layout');
   return result;
 }
 
@@ -286,6 +287,7 @@ export async function setNote(pillarId: string, date: IsoDate, note: string) {
     .eq('user_pillar_id', pillarId)
     .eq('log_date', date);
   revalidatePath('/dashboard');
+  revalidatePath('/calendar', 'layout');
 }
 
 export async function toggleMicroAction(actionId: string, date: IsoDate) {
@@ -321,6 +323,7 @@ export async function toggleMicroAction(actionId: string, date: IsoDate) {
   }
 
   revalidatePath('/dashboard');
+  revalidatePath('/calendar', 'layout');
   return !existing;
 }
 

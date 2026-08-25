@@ -104,6 +104,56 @@ export async function getEntries(
   return out;
 }
 
+/** One calendar day as the calendar page needs it: the ratings, plus whether
+ *  anything was written in late. */
+export interface CalendarDay {
+  date: IsoDate;
+  ratings: Record<string, StarRating>;
+  /** True when at least one rating was written more than a day after the date it
+   *  belongs to. Backfilling is allowed, but it should be visible — otherwise
+   *  streaks are trivially gameable and the history stops being trustworthy. */
+  backfilled: boolean;
+}
+
+export async function getCalendarDays(
+  db: DB,
+  userId: string,
+  from: IsoDate,
+  to: IsoDate,
+): Promise<Map<IsoDate, CalendarDay>> {
+  const { data } = await db
+    .from('daily_logs')
+    .select('user_pillar_id, log_date, stars, created_at')
+    .eq('user_id', userId)
+    .gte('log_date', from)
+    .lte('log_date', to);
+
+  const days = new Map<IsoDate, CalendarDay>();
+
+  for (const row of (data ?? []) as {
+    user_pillar_id: string;
+    log_date: string;
+    stars: number;
+    created_at: string;
+  }[]) {
+    const day = days.get(row.log_date) ?? {
+      date: row.log_date,
+      ratings: {},
+      backfilled: false,
+    };
+    day.ratings[row.user_pillar_id] = row.stars as StarRating;
+
+    // `created_at` is an instant; comparing its calendar date against the day
+    // being logged is enough to spot an entry written well after the fact.
+    const writtenOn = row.created_at.slice(0, 10);
+    if (writtenOn > addDays(row.log_date, 1)) day.backfilled = true;
+
+    days.set(row.log_date, day);
+  }
+
+  return days;
+}
+
 export async function getXpTotals(db: DB, userId: string) {
   const { data } = await db
     .from('xp_events')
