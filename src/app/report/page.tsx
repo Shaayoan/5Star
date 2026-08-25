@@ -22,7 +22,9 @@ import { Card, CardDescription, CardTitle, Chip, EmptyState, StatTile } from '@/
 import { StarDisplay } from '@/components/StarPicker';
 import { PageTitle, Shell } from '@/components/Shell';
 import { dayScore } from '@/lib/game';
+import { isAiConfigured } from '@/lib/ai/config';
 import { alpha } from '@/lib/utils';
+import { DeepReview } from './DeepReview';
 
 export default async function ReportPage({
   searchParams,
@@ -51,6 +53,14 @@ export default async function ReportPage({
 
   const quests = await getQuests(db, user.id, start);
   const questsDone = quests.filter((q) => q.status === 'completed').length;
+
+  const { data: cachedReport } = await db
+    .from('weekly_reports')
+    .select('narrative')
+    .eq('user_id', user.id)
+    .eq('week_start', start)
+    .maybeSingle<{ narrative: string | null }>();
+  const cachedNarrative = cachedReport?.narrative ?? null;
 
   const narrative = buildNarrative({
     week,
@@ -166,6 +176,12 @@ export default async function ReportPage({
               <p className="mt-4 rounded-lg bg-gold-500/10 px-3 py-2 text-sm text-gold-300">
                 {narrative.closing}
               </p>
+
+              <DeepReview
+                weekStart={start}
+                cached={cachedNarrative}
+                available={isAiConfigured}
+              />
             </Card>
           </div>
 

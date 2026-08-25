@@ -173,3 +173,57 @@ scales with its streak. A neglected pillar visibly bares its branch.
 The canopy is drawn from the pillar count, not a fixed five: branches fan evenly across
 `±min(78°, 54° + 4n)` and shorten slightly past five so a seventh branch has somewhere to go.
 Adding a pillar therefore grows the tree a new branch rather than redrawing it.
+
+---
+
+## 12. Conversational logging (v2)
+
+The chat never writes. Every tool call is a **proposal** the user sees, edits and confirms;
+only then do the ordinary server actions run. This is deliberate — the app's only value is
+an honest self-assessment, and a model that quietly inflates ratings makes the balance score
+meaningless.
+
+### Grounding
+
+Each pillar already stores `definition`: the user's own sentence describing a good day. That
+is the rubric the model grades against, quoted verbatim into the system prompt. Alongside it
+go the pillar's 30-day mean (their personal calibration), days since last logged, what is
+already rated today, the weakest pillar of the week, and the active quests.
+
+### Anti-inflation rules
+
+| Rule | Why |
+|---|---|
+| Grade against the user's definition, not the model's idea of a good day | Makes ratings personal and defensible |
+| Ratings of 4–5 require an `evidence` field quoting the user | Forces a rating to be traceable to something actually said |
+| The 30-day mean is stated as "their normal" | Anchors against drift |
+| "3 is a solid, ordinary day. Most days are 3s." | Counteracts model agreeableness |
+| Vague input ("it was fine") must trigger a follow-up, not a guess | Prevents invented data |
+
+### `skip_pillar`
+
+A pillar the user never mentioned is left **unrated**, not guessed at. Unlogged and bad are
+different states throughout the scoring engine (§1), so the model is given an explicit tool
+to say "not enough information" rather than defaulting to 3.
+
+### Idempotency
+
+Confirmed proposals go through the same `daily_logs` upsert and `xp_events` dedupe keys as
+manual entry (§2). Chatting at lunch and again at midnight therefore *corrects* the day
+rather than double-logging or double-paying XP.
+
+### Privacy
+
+`user_pillars.chat_enabled` excludes a pillar from the chat entirely — it is never named in
+the prompt and its micro-actions are never offered. Financial and Relational are the ones
+people most often want out.
+
+### Model split
+
+`claude-haiku-4-5` for the extraction loop: frequent, latency-sensitive, cheap.
+`claude-sonnet-4-5` for the weekly review: once a week, over a whole week of notes, and the
+thing people actually read.
+
+The weekly review stays **opt-in per week**. The rule-based narrative (§9) remains the
+default because it is free, instant, and cannot invent a number; the AI version only earns
+its keep once the chat has produced real notes to find patterns in.

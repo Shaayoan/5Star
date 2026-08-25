@@ -36,6 +36,9 @@ export interface UserPillar {
   color: string;
   definition: string;
   is_active: boolean;
+  /** When false the pillar is invisible to the AI chat — never named in the
+   *  prompt, never rated by it. */
+  chat_enabled: boolean;
   created_at: string;
 }
 

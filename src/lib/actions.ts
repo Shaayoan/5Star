@@ -16,7 +16,15 @@ import {
 } from './engine';
 import { summarise, buildNarrative, narrativeToText } from './game';
 import { MAX_PILLARS, MIN_PILLARS } from './game/constants';
-import { getActivePillars, getCurrentSeason, getEntries, type DB } from './queries';
+import { isAiConfigured } from './ai/config';
+import { writeWeeklyNarrative } from './ai/narrative';
+import {
+  getActivePillars,
+  getCurrentSeason,
+  getEntries,
+  getProfile,
+  type DB,
+} from './queries';
 import type { IsoDate, Quest, StarRating } from './types';
 
 /* --------------------------------------------------------------- profile -- */
@@ -316,6 +324,97 @@ export async function toggleMicroAction(actionId: string, date: IsoDate) {
   return !existing;
 }
 
+/* ----------------------------------------------------------------- chat -- */
+
+export interface CommitItem {
+  kind: 'rating' | 'action';
+  pillarId?: string;
+  stars?: StarRating;
+  note?: string | null;
+  actionId?: string;
+}
+
+/**
+ * Writes a batch of confirmed chat proposals. The chat itself never writes —
+ * everything it suggests lands here only after the user has seen and edited it.
+ *
+ * Recompute runs once at the end rather than per item, so a six-pillar day costs
+ * one badge/quest pass instead of six.
+ */
+export async function commitProposals(items: CommitItem[], date: IsoDate) {
+  const { db, user } = await requireUser();
+  const pillars = await getActivePillars(db, user.id);
+  const valid = new Set(pillars.map((p) => p.id));
+
+  for (const item of items) {
+    if (item.kind === 'rating') {
+      if (!item.pillarId || !valid.has(item.pillarId)) continue;
+      const stars = item.stars ?? 0;
+      if (stars < 1 || stars > 5) continue;
+
+      await db.from('daily_logs').upsert(
+        {
+          user_id: user.id,
+          user_pillar_id: item.pillarId,
+          log_date: date,
+          stars,
+          ...(item.note !== undefined ? { note: item.note } : {}),
+        },
+        { onConflict: 'user_pillar_id,log_date' },
+      );
+      await grantLogXp(db, user.id, item.pillarId, date, stars);
+      continue;
+    }
+
+    if (item.kind === 'action' && item.actionId) {
+      const { data: action } = await db
+        .from('micro_actions')
+        .select('id, user_pillar_id, xp_value')
+        .eq('id', item.actionId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!action) continue;
+
+      await db.from('action_logs').upsert(
+        {
+          user_id: user.id,
+          micro_action_id: action.id,
+          user_pillar_id: action.user_pillar_id,
+          log_date: date,
+        },
+        { onConflict: 'micro_action_id,log_date' },
+      );
+      await grantActionXp(db, user.id, action.user_pillar_id, action.id, date, action.xp_value);
+    }
+  }
+
+  const result = await recompute(db, user.id, pillars, date);
+
+  revalidatePath('/dashboard');
+  revalidatePath('/chat');
+  revalidatePath('/report');
+  return result;
+}
+
+/** Per-pillar opt-out. A pillar switched off is never named in the prompt. */
+export async function setPillarChatEnabled(pillarId: string, enabled: boolean) {
+  const { db, user } = await requireUser();
+  await db
+    .from('user_pillars')
+    .update({ chat_enabled: enabled })
+    .eq('id', pillarId)
+    .eq('user_id', user.id);
+  revalidatePath('/pillars');
+  revalidatePath('/chat');
+}
+
+/** Wipes today's stored conversation. Ratings already committed are untouched. */
+export async function resetChat(date: IsoDate) {
+  const { db, user } = await requireUser();
+  await db.from('chat_sessions').delete().eq('user_id', user.id).eq('log_date', date);
+  revalidatePath('/chat');
+}
+
 /* ---------------------------------------------------------- pillar admin -- */
 
 export async function updatePillar(
@@ -426,6 +525,60 @@ export async function generateReport(date: IsoDate = todayIso()) {
 
   revalidatePath('/report');
   return { start, end };
+}
+
+/** Generates the deeper AI write-up for one week and caches it on the report
+ *  row. Opt-in per week, because it costs a model call — the rule-based
+ *  narrative is what renders by default. */
+export async function generateAiNarrative(weekStartIso: IsoDate) {
+  const { db, user } = await requireUser();
+  if (!isAiConfigured) throw new Error('The server has no ANTHROPIC_API_KEY set.');
+
+  const start = weekStart(weekStartIso);
+  const end = addDays(start, 6);
+
+  const pillars = await getActivePillars(db, user.id);
+  const entries = await getEntries(db, user.id, addDays(start, -7), end);
+  const inWeek = entries.filter((e) => e.date >= start);
+  const week = summarise(inWeek, pillars);
+
+  if (week.loggedDays === 0 && Object.values(week.counts).every((c) => c === 0)) {
+    throw new Error('There is nothing logged this week to write about.');
+  }
+
+  const profile = await getProfile(db, user.id);
+
+  const text = await writeWeeklyNarrative({
+    week,
+    previous: summarise(
+      entries.filter((e) => e.date < start),
+      pillars,
+    ),
+    pillars,
+    entries: inWeek,
+    displayName: profile?.display_name ?? null,
+  });
+
+  await db.from('weekly_reports').upsert(
+    {
+      user_id: user.id,
+      week_start: start,
+      week_end: end,
+      payload: {
+        means: week.means,
+        counts: week.counts,
+        overall: week.overall,
+        balance: week.balance,
+        loggedDays: week.loggedDays,
+        fiveStarDays: week.fiveStarDays,
+      },
+      narrative: text,
+    },
+    { onConflict: 'user_id,week_start' },
+  );
+
+  revalidatePath('/report');
+  return text;
 }
 
 /* ----------------------------------------------------------------- auth -- */

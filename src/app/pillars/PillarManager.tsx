@@ -6,6 +6,7 @@ import {
   addPillar,
   archivePillar,
   deleteMicroAction,
+  setPillarChatEnabled,
   startNewSeason,
   updatePillar,
   type PillarPick,
@@ -208,6 +209,7 @@ function PillarEditor({
   const [definition, setDefinition] = useState(pillar.definition);
   const [newLabel, setNewLabel] = useState('');
   const [newXp, setNewXp] = useState(5);
+  const [chatEnabled, setChatEnabled] = useState(pillar.chat_enabled ?? true);
   const [pending, startTransition] = useTransition();
 
   const dirty =
@@ -355,6 +357,27 @@ function PillarEditor({
               </Button>
             </div>
           </div>
+
+          <label className="flex items-start gap-3 rounded-lg bg-ink-900/50 p-3">
+            <input
+              type="checkbox"
+              checked={chatEnabled}
+              disabled={pending}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setChatEnabled(next);
+                startTransition(() => setPillarChatEnabled(pillar.id, next));
+              }}
+              className="mt-0.5 h-4 w-4 accent-[var(--color-gold-500)]"
+            />
+            <span className="text-xs text-ink-300">
+              Include in the AI chat.
+              <span className="block text-ink-400">
+                Switch off and this pillar is never mentioned to the model — you rate it by
+                hand only.
+              </span>
+            </span>
+          </label>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             {canArchive ? (
