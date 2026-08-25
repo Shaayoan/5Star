@@ -75,15 +75,20 @@ export function Shell({
                 key={l.href}
                 href={l.href}
                 aria-current={on ? 'page' : undefined}
+                // min-w-0 is load-bearing: without it `flex-1` still refuses to
+                // shrink past the label's min-content width, and seven tabs push
+                // the whole page into horizontal scroll on a narrow phone.
                 className={cn(
-                  'flex flex-1 flex-col items-center gap-0.5 px-1 py-2 transition-colors',
+                  'flex min-w-0 flex-1 flex-col items-center gap-0.5 px-0.5 py-2 transition-colors',
                   on ? 'text-gold-400' : 'text-ink-400',
                 )}
               >
                 <span className={cn('text-base leading-none', on && 'animate-pop')}>
                   {l.icon}
                 </span>
-                <span className="text-[9px] leading-none">{l.label}</span>
+                <span className="w-full truncate text-center text-[9px] leading-none">
+                  {l.label}
+                </span>
                 <span
                   className={cn(
                     'mt-0.5 h-0.5 w-5 rounded-full transition-colors',
