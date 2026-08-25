@@ -26,16 +26,20 @@ Legend: `DONE` = shipped & compiles · `WIP` = in progress · `TODO` = not start
 | 15 | Accounts: signup/signin/magic link/reset, profile + timezone persistence | DONE | `src/app/login/*`, `src/app/auth/*`, `src/app/settings/*` |
 | 16 | Pillars beyond five: add mid-season, retire, tree grows a branch | DONE | `supabase/migrations/0002_*`, `src/components/LifeTree.tsx` |
 | 17 | Deploy to Vercel | DONE | live at https://5star-iota.vercel.app |
-| 19 | v2 conversational logging (Gemini) | DONE | , , migration 0004 |
-| 20 | Calendar with click-to-backfill | DONE | ,  |
-| 21 | Trend chart on the report | DONE | ,  |
 | 18 | Connect production env vars + Supabase auth URLs | TODO | `scripts/deploy.sh` |
+| 19 | v2 conversational logging, on Gemini | DONE | `src/lib/ai/*`, `src/app/chat/*`, `supabase/migrations/0004_chat.sql` |
+| 20 | Calendar with click-to-backfill | DONE | `src/app/calendar/*`, `src/components/DayRing.tsx` |
+| 21 | Trend chart on the report | DONE | `src/lib/game/series.ts`, `src/components/TrendChart.tsx` |
 
 ## Live environment
 
 - **Project**: `Shaayoan's Project` — ref `mxzvtrpaukvpmarrzqqr`, region `ap-southeast-1`.
 - Credentials are in `.env.local` (gitignored). `.env.example` shows the shape.
-- Migrations `0001`–`0003` are applied. Add new numbered files; never edit an applied one.
+- Migrations `0001`–`0004` are applied. Add new numbered files; never edit an applied one.
+- **AI**: `GEMINI_API_KEY` drives the chat and the deeper weekly review. Model names go stale
+  fast — both are overridable via `GEMINI_CHAT_MODEL` / `GEMINI_NARRATIVE_MODEL`. As of the
+  last check `gemini-2.5-flash` and `gemini-2.5-pro` are both retired for new keys, and Pro
+  returns 429 on the free tier, so both jobs default to `gemini-3.6-flash`.
 - A throwaway account (`verify@fivestar.test`) was created during testing and holds some
   sample logs. Its password is not recorded here on purpose. Remove it with:
   `delete from auth.users where email = 'verify@fivestar.test';` (cascades to all its data).
@@ -107,4 +111,9 @@ here — the Vercel MCP has no env-var tool and the Supabase MCP has no auth-con
 - **Schema changes**: add a new numbered file in `supabase/migrations/`, never edit `0001_init.sql`.
 - **Formulas** live in one place: `src/lib/game/`. They are pure functions with no imports from
   Next/Supabase, so they can be unit-tested or reused by a future mobile client.
-- **Next step (phase 14)**: create a Supabase project, run the migration, set env vars, `vercel deploy`.
+- **Next step (phase 18)**: run `bash scripts/deploy.sh` to push env vars to Vercel, then set
+  the Supabase auth URLs. Add `GEMINI_API_KEY` to Vercel too, or the chat is unavailable in
+  production while still working locally.
+- **Known debt**: the write path still lives in Next server actions, so a future mobile client
+  cannot reuse it. Moving `commitProposals` / `setStars` / `recompute` into a Supabase Edge
+  Function is the prerequisite for the iPhone app.
