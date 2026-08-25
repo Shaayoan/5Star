@@ -78,12 +78,13 @@ export async function POST(request: Request) {
 
       const calls = response.functionCalls ?? [];
 
-      // Echo the model's own turn back verbatim so it keeps its context.
-      const modelParts: Part[] = [
-        ...(response.text ? [{ text: response.text }] : []),
-        ...calls.map((c) => ({ functionCall: c })),
-      ];
-      if (modelParts.length > 0) contents.push({ role: 'model', parts: modelParts });
+      // Echo the model's own turn back *verbatim*, straight from the candidate.
+      // Rebuilding the parts from `response.functionCalls` drops the
+      // `thoughtSignature` that Gemini 3 attaches to each call, and the next
+      // request is then rejected with "Function call is missing a
+      // thought_signature".
+      const modelContent = response.candidates?.[0]?.content;
+      if (modelContent?.parts?.length) contents.push(modelContent);
 
       if (calls.length === 0) break;
 
