@@ -150,9 +150,9 @@ export function ChatBox({
   const hasDraft = drafts.length > 0 || actionIds.length > 0;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
       {/* ------------------------------------------------------ conversation */}
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         <Card className="flex h-[28rem] flex-col p-0">
           <div ref={scroller} className="flex-1 space-y-3 overflow-y-auto p-4">
             {turns.length === 0 && (
@@ -266,7 +266,7 @@ export function ChatBox({
       </div>
 
       {/* -------------------------------------------------- confirmation card */}
-      <aside className="space-y-3">
+      <aside className="min-w-0 space-y-3">
         <Card>
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Ready to log</h2>

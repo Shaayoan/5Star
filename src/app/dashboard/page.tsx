@@ -83,8 +83,8 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="min-w-0 space-y-4">
           <CheckIn
             date={data.today}
             completedActionIds={[...data.completedActionIds]}
@@ -126,7 +126,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <aside className="stagger space-y-4">
+        <aside className="stagger min-w-0 space-y-4">
           <Card className="p-2 card-lift">
             <LifeTree
               className="w-full"
