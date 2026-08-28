@@ -24,7 +24,9 @@ import { StarDisplay } from '@/components/StarPicker';
 import { PageTitle, Shell } from '@/components/Shell';
 import { dayScore } from '@/lib/game';
 import { buildSeries } from '@/lib/game/series';
+import { buildInsights, moversSentence, weekMovers } from '@/lib/game/insights';
 import { TrendChart } from '@/components/TrendChart';
+import { Insights, Movers } from '@/components/Insights';
 import { isAiConfigured } from '@/lib/ai/config';
 import { alpha } from '@/lib/utils';
 import { DeepReview } from './DeepReview';
@@ -92,6 +94,11 @@ export default async function ReportPage({
     score: dayScore(e, ids),
     label: formatDate(e.date, { weekday: 'short' }),
   }));
+
+  // Patterns are drawn from the whole year of history, not just this week —
+  // a correlation needs far more than seven days to mean anything.
+  const insightReport = buildInsights(entries, pillars);
+  const movers = weekMovers(inWeek, inPrev, pillars);
 
   const dayMax = maxDayScore(ids.length);
   const heatDates = lastNDays(30, end);
@@ -189,6 +196,12 @@ export default async function ReportPage({
                   ))}
                 </ul>
               )}
+              {moversSentence(movers) && (
+                <p className="mt-3 text-sm leading-relaxed text-ink-200">
+                  {moversSentence(movers)}
+                </p>
+              )}
+
               <p className="mt-4 rounded-lg bg-gold-500/10 px-3 py-2 text-sm text-gold-300">
                 {narrative.closing}
               </p>
@@ -231,7 +244,11 @@ export default async function ReportPage({
                 );
               })}
             </div>
+
+            <Movers movers={movers} />
           </Card>
+
+          <Insights report={insightReport} pillars={pillars} />
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
