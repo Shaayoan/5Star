@@ -56,7 +56,7 @@ function PillarRow({
   done: Set<string>;
   setDone: (s: Set<string>) => void;
 }) {
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const { celebrate, celebrateBadges } = useCelebrate();
 
   const [stars, optimisticStars] = useOptimistic(
@@ -132,7 +132,7 @@ function PillarRow({
 
   return (
     <div
-      className={cn('card card-lift relative p-4', pending && 'opacity-80')}
+      className="card card-lift relative p-4"
       style={
         rated
           ? {
@@ -180,7 +180,7 @@ function PillarRow({
         </div>
 
         <div className="shrink-0">
-          <StarPicker value={stars} onChange={handleStars} color={pillar.color} disabled={pending} />
+          <StarPicker value={stars} onChange={handleStars} color={pillar.color} />
         </div>
       </div>
 

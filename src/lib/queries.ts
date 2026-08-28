@@ -256,8 +256,19 @@ export async function getDashboardData(
 ): Promise<DashboardData> {
   const from = addDays(anchor, -(HISTORY_DAYS - 1));
 
-  const [profile, season, pillars, entries, xp, badgeKeys, actions, completedActionIds] =
-    await Promise.all([
+  // Every one of these is an independent round trip to Singapore, so they all
+  // go out together. Awaiting even one of them separately adds a full RTT.
+  const [
+    profile,
+    season,
+    pillars,
+    entries,
+    xp,
+    badgeKeys,
+    actions,
+    completedActionIds,
+    quests,
+  ] = await Promise.all([
       getProfile(db, userId),
       getCurrentSeason(db, userId),
       getActivePillars(db, userId),
@@ -266,9 +277,8 @@ export async function getDashboardData(
       getBadgeKeys(db, userId),
       getMicroActions(db, userId),
       getActionLogDates(db, userId, anchor),
+      getQuests(db, userId, weekStart(anchor)),
     ]);
-
-  const quests = await getQuests(db, userId, weekStart(anchor));
 
   const ids = pillars.map((p) => p.id);
   const byDate = new Map(entries.map((e) => [e.date, e]));

@@ -248,32 +248,43 @@ export async function setStars(
   note?: string | null,
 ): Promise<RecomputeResult> {
   const { db, user } = await requireUser();
-  const pillars = await getActivePillars(db, user.id);
+
+  // These two are independent, and each is a round trip to the database.
+  const [pillars, anchor] = await Promise.all([
+    getActivePillars(db, user.id),
+    userToday(db, user.id),
+  ]);
   if (!pillars.some((p) => p.id === pillarId)) throw new Error('Unknown pillar');
 
+  // The log row and its XP entry are keyed independently, so they can go
+  // together instead of one after the other.
   if (stars === 0) {
-    await db
-      .from('daily_logs')
-      .delete()
-      .eq('user_id', user.id)
-      .eq('user_pillar_id', pillarId)
-      .eq('log_date', date);
-    await revokeLogXp(db, user.id, pillarId, date);
+    await Promise.all([
+      db
+        .from('daily_logs')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('user_pillar_id', pillarId)
+        .eq('log_date', date),
+      revokeLogXp(db, user.id, pillarId, date),
+    ]);
   } else {
-    await db.from('daily_logs').upsert(
-      {
-        user_id: user.id,
-        user_pillar_id: pillarId,
-        log_date: date,
-        stars,
-        ...(note !== undefined ? { note } : {}),
-      },
-      { onConflict: 'user_pillar_id,log_date' },
-    );
-    await grantLogXp(db, user.id, pillarId, date, stars);
+    await Promise.all([
+      db.from('daily_logs').upsert(
+        {
+          user_id: user.id,
+          user_pillar_id: pillarId,
+          log_date: date,
+          stars,
+          ...(note !== undefined ? { note } : {}),
+        },
+        { onConflict: 'user_pillar_id,log_date' },
+      ),
+      grantLogXp(db, user.id, pillarId, date, stars),
+    ]);
   }
 
-  const result = await recompute(db, user.id, pillars, date, await userToday(db, user.id));
+  const result = await recompute(db, user.id, pillars, date, anchor);
   revalidatePath('/dashboard');
   revalidatePath('/calendar', 'layout');
   return result;
@@ -294,33 +305,39 @@ export async function setNote(pillarId: string, date: IsoDate, note: string) {
 export async function toggleMicroAction(actionId: string, date: IsoDate) {
   const { db, user } = await requireUser();
 
-  const { data: action } = await db
-    .from('micro_actions')
-    .select('id, user_pillar_id, xp_value')
-    .eq('id', actionId)
-    .eq('user_id', user.id)
-    .maybeSingle();
+  // Looking up the action and whether it is already ticked are independent.
+  const [{ data: action }, { data: existing }] = await Promise.all([
+    db
+      .from('micro_actions')
+      .select('id, user_pillar_id, xp_value')
+      .eq('id', actionId)
+      .eq('user_id', user.id)
+      .maybeSingle(),
+    db
+      .from('action_logs')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('micro_action_id', actionId)
+      .eq('log_date', date)
+      .maybeSingle(),
+  ]);
   if (!action) throw new Error('Unknown action');
 
-  const { data: existing } = await db
-    .from('action_logs')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('micro_action_id', actionId)
-    .eq('log_date', date)
-    .maybeSingle();
-
   if (existing) {
-    await db.from('action_logs').delete().eq('id', existing.id);
-    await revokeActionXp(db, user.id, actionId, date);
+    await Promise.all([
+      db.from('action_logs').delete().eq('id', existing.id),
+      revokeActionXp(db, user.id, actionId, date),
+    ]);
   } else {
-    await db.from('action_logs').insert({
-      user_id: user.id,
-      micro_action_id: actionId,
-      user_pillar_id: action.user_pillar_id,
-      log_date: date,
-    });
-    await grantActionXp(db, user.id, action.user_pillar_id, actionId, date, action.xp_value);
+    await Promise.all([
+      db.from('action_logs').insert({
+        user_id: user.id,
+        micro_action_id: actionId,
+        user_pillar_id: action.user_pillar_id,
+        log_date: date,
+      }),
+      grantActionXp(db, user.id, action.user_pillar_id, actionId, date, action.xp_value),
+    ]);
   }
 
   revalidatePath('/dashboard');

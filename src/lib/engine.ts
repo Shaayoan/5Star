@@ -187,7 +187,21 @@ export async function recompute(
   anchor: IsoDate = todayIso(),
 ): Promise<RecomputeResult> {
   const ids = pillars.map((p) => p.id);
-  const entries = await getEntries(db, userId, addDays(anchor, -(HISTORY - 1)), anchor);
+  const thisWeek = weekStart(anchor);
+
+  // Every await here is a round trip to Singapore, so anything that does not
+  // depend on another result runs together. Sequential awaits were what made a
+  // single star tap feel slow.
+  const [entries, profileResult, questsBefore] = await Promise.all([
+    getEntries(db, userId, addDays(anchor, -(HISTORY - 1)), anchor),
+    db
+      .from('profiles')
+      .select('freezes_available, freeze_granted_on')
+      .eq('id', userId)
+      .maybeSingle(),
+    getQuests(db, userId, thisWeek),
+  ]);
+
   const byDate = new Map(entries.map((e) => [e.date, e]));
   const dayEntry = byDate.get(date) ?? { date, ratings: {} };
 
@@ -196,53 +210,55 @@ export async function recompute(
   const fiveStar = isFiveStarDay(dayEntry, ids);
   const perfect = isPerfectDay(dayEntry, ids);
 
-  if (fiveStar) {
-    await grantXp(db, {
-      user_id: userId,
-      user_pillar_id: null,
-      source: 'five_star_day',
-      amount: FIVE_STAR_DAY_BONUS,
-      log_date: date,
-      dedupe_key: `fsd:${date}`,
-    });
-  } else {
-    await revokeXp(db, userId, `fsd:${date}`);
-  }
-
-  if (perfect) {
-    await grantXp(db, {
-      user_id: userId,
-      user_pillar_id: null,
-      source: 'perfect_day',
-      amount: PERFECT_DAY_BONUS,
-      log_date: date,
-      dedupe_key: `perfect:${date}`,
-    });
-  } else {
-    await revokeXp(db, userId, `perfect:${date}`);
-  }
+  await Promise.all([
+    fiveStar
+      ? grantXp(db, {
+          user_id: userId,
+          user_pillar_id: null,
+          source: 'five_star_day',
+          amount: FIVE_STAR_DAY_BONUS,
+          log_date: date,
+          dedupe_key: `fsd:${date}`,
+        })
+      : revokeXp(db, userId, `fsd:${date}`),
+    perfect
+      ? grantXp(db, {
+          user_id: userId,
+          user_pillar_id: null,
+          source: 'perfect_day',
+          amount: PERFECT_DAY_BONUS,
+          log_date: date,
+          dedupe_key: `perfect:${date}`,
+        })
+      : revokeXp(db, userId, `perfect:${date}`),
+  ]);
 
   /* ---- streak milestones and freezes --------------------------------- */
 
-  const { data: profileRow } = await db
-    .from('profiles')
-    .select('freezes_available, freeze_granted_on')
-    .eq('id', userId)
-    .maybeSingle();
-
+  const profileRow = profileResult.data;
   const freezesHeld = profileRow?.freezes_available ?? 0;
   const streak = checkInStreak(entries, ids, anchor, freezesHeld);
 
   const milestone = streakMilestoneXp(streak.current);
+  const weekEntries = entries.filter((e) => e.date >= thisWeek);
+  const completedQuests: string[] = [];
+
+  // Streak payout, the freeze grant and every quest update are independent of
+  // each other, so they all go out at once rather than one after another.
+  // Supabase query builders are thenable but not real Promises.
+  const writes: PromiseLike<unknown>[] = [];
+
   if (milestone > 0) {
-    await grantXp(db, {
-      user_id: userId,
-      user_pillar_id: null,
-      source: 'streak_milestone',
-      amount: milestone,
-      log_date: anchor,
-      dedupe_key: `streak:${streak.current}`,
-    });
+    writes.push(
+      grantXp(db, {
+        user_id: userId,
+        user_pillar_id: null,
+        source: 'streak_milestone',
+        amount: milestone,
+        log_date: anchor,
+        dedupe_key: `streak:${streak.current}`,
+      }),
+    );
   }
 
   // One freeze per full week of check-ins, granted at most once per day.
@@ -252,41 +268,42 @@ export async function recompute(
     freezesHeld < MAX_FREEZES &&
     profileRow?.freeze_granted_on !== anchor
   ) {
-    await db
-      .from('profiles')
-      .update({ freezes_available: freezesHeld + 1, freeze_granted_on: anchor })
-      .eq('id', userId);
+    writes.push(
+      db
+        .from('profiles')
+        .update({ freezes_available: freezesHeld + 1, freeze_granted_on: anchor })
+        .eq('id', userId),
+    );
   }
 
-  /* ---- quests -------------------------------------------------------- */
-
-  const thisWeek = weekStart(anchor);
-  const weekEntries = entries.filter((e) => e.date >= thisWeek);
-  const quests = await getQuests(db, userId, thisWeek);
-  const completedQuests: string[] = [];
-
-  for (const quest of quests) {
+  for (const quest of questsBefore) {
     const progress = questProgress(quest, weekEntries, ids);
     const done = isQuestComplete(progress, quest.target_count);
     if (progress === quest.progress && (!done || quest.status === 'completed')) continue;
 
-    await db
-      .from('quests')
-      .update({ progress, status: done ? 'completed' : 'active' })
-      .eq('id', quest.id);
+    writes.push(
+      db
+        .from('quests')
+        .update({ progress, status: done ? 'completed' : 'active' })
+        .eq('id', quest.id),
+    );
 
     if (done && quest.status !== 'completed') {
       completedQuests.push(quest.id);
-      await grantXp(db, {
-        user_id: userId,
-        user_pillar_id: quest.user_pillar_id,
-        source: 'quest',
-        amount: quest.xp_reward,
-        log_date: anchor,
-        dedupe_key: `quest:${quest.id}`,
-      });
+      writes.push(
+        grantXp(db, {
+          user_id: userId,
+          user_pillar_id: quest.user_pillar_id,
+          source: 'quest',
+          amount: quest.xp_reward,
+          log_date: anchor,
+          dedupe_key: `quest:${quest.id}`,
+        }),
+      );
     }
   }
+
+  if (writes.length > 0) await Promise.all(writes);
 
   /* ---- badges -------------------------------------------------------- */
 
@@ -335,25 +352,29 @@ export async function recompute(
   });
 
   if (newBadges.length > 0) {
-    await db
-      .from('user_badges')
-      .upsert(
-        newBadges.map((key) => ({ user_id: userId, badge_key: key })),
-        { onConflict: 'user_id,badge_key' },
-      );
-
-    for (const key of newBadges) {
-      const def = BADGES_BY_KEY[key];
-      if (!def) continue;
-      await grantXp(db, {
+    // Both the badges and all of their XP go in as two batched upserts rather
+    // than one round trip per badge.
+    const xpRows = newBadges
+      .map((key) => BADGES_BY_KEY[key])
+      .filter(Boolean)
+      .map((def) => ({
         user_id: userId,
         user_pillar_id: null,
-        source: 'badge',
+        source: 'badge' as const,
         amount: def.xp,
         log_date: anchor,
-        dedupe_key: `badge:${key}`,
-      });
-    }
+        dedupe_key: `badge:${def.key}`,
+      }));
+
+    await Promise.all([
+      db.from('user_badges').upsert(
+        newBadges.map((key) => ({ user_id: userId, badge_key: key })),
+        { onConflict: 'user_id,badge_key' },
+      ),
+      xpRows.length
+        ? db.from('xp_events').upsert(xpRows, { onConflict: 'user_id,dedupe_key' })
+        : Promise.resolve(),
+    ]);
   }
 
   return {
