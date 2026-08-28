@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, Sora } from 'next/font/google';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import { CelebrateProvider } from '@/components/Celebrate';
 import './globals.css';
 
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${sans.variable} ${display.variable}`}>
       <body className="font-sans antialiased">
         <CelebrateProvider>{children}</CelebrateProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
