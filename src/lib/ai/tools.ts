@@ -53,6 +53,28 @@ export const CHAT_TOOLS: FunctionDeclaration[] = [
     },
   },
   {
+    name: 'set_log_date',
+    description:
+      'Switch which day the conversation is logging for. Call this the moment the user ' +
+      'mentions a different day — "yesterday", "on Monday", "the 20th", "last Friday" — ' +
+      'before proposing any ratings, so the ratings land on the right date. Work out the ' +
+      'actual calendar date yourself from the reference dates given in your instructions.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        date: {
+          type: Type.STRING,
+          description: 'The target day as YYYY-MM-DD. Never a future date.',
+        },
+        reason: {
+          type: Type.STRING,
+          description: 'What the user said that indicated this day, e.g. "yesterday".',
+        },
+      },
+      required: ['date'],
+    },
+  },
+  {
     name: 'skip_pillar',
     description:
       'Record that there is not enough information to rate a pillar. Unlogged and ' +
@@ -90,7 +112,17 @@ export interface SkipProposal {
   reason?: string;
 }
 
-export type Proposal = RatingProposal | ActionProposal | SkipProposal;
+/** Not a proposal the user confirms — it retargets the whole conversation, so
+ *  the route acts on it immediately and tells the client to follow. */
+export interface DateProposal {
+  kind: 'date';
+  date: string;
+  reason?: string;
+}
+
+export type Proposal = RatingProposal | ActionProposal | SkipProposal | DateProposal;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Narrow a function call into a proposal, discarding anything malformed rather
  *  than trusting the model's shape. */
@@ -114,6 +146,16 @@ export function toProposal(name: string, input: unknown): Proposal | null {
   if (name === 'propose_action') {
     if (!obj.action_id) return null;
     return { kind: 'action', actionId: String(obj.action_id) };
+  }
+
+  if (name === 'set_log_date') {
+    const date = String(obj.date ?? '');
+    if (!ISO_DATE.test(date)) return null;
+    return {
+      kind: 'date',
+      date,
+      reason: obj.reason ? String(obj.reason) : undefined,
+    };
   }
 
   if (name === 'skip_pillar') {

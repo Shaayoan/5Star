@@ -2,6 +2,7 @@ import { GoogleGenAI, type Content, type Part } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth';
 import { userToday } from '@/lib/userDate';
+import { addDays } from '@/lib/dates';
 import { getChatContext, loadChatSession, saveChatSession } from '@/lib/ai/context';
 import { buildSystemPrompt } from '@/lib/ai/prompt';
 import { CHAT_TOOLS, toProposal, type Proposal } from '@/lib/ai/tools';
@@ -17,6 +18,17 @@ import {
 
 export const maxDuration = 60;
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A day is loggable if it is a real date, not in the future, and inside the
+ *  window the app actually reads (90 days of history). */
+function clampDate(candidate: string | undefined, today: string): string | null {
+  if (!candidate || !ISO_DATE.test(candidate)) return null;
+  if (candidate > today) return null;
+  if (candidate < addDays(today, -364)) return null;
+  return candidate;
+}
+
 export async function POST(request: Request) {
   if (!isAiConfigured) {
     return NextResponse.json(
@@ -27,7 +39,7 @@ export async function POST(request: Request) {
 
   const { db, user } = await requireUser();
 
-  let body: { message?: unknown };
+  let body: { message?: unknown; date?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -37,37 +49,39 @@ export async function POST(request: Request) {
   const message = typeof body.message === 'string' ? body.message.trim().slice(0, 2000) : '';
   if (!message) return NextResponse.json({ error: 'Say something first.' }, { status: 400 });
 
-  const date = await userToday(db, user.id);
-  const ctx = await getChatContext(db, user.id, date);
-
-  if (ctx.pillars.length === 0) {
-    return NextResponse.json(
-      { error: 'No pillars are available to the chat. Enable at least one on the Pillars page.' },
-      { status: 400 },
-    );
-  }
-
-  const history = await loadChatSession(db, user.id, date);
-  const contents: Content[] = [
-    ...history.slice(-MAX_HISTORY_MESSAGES),
-    { role: 'user', parts: [{ text: message }] },
-  ];
-
-  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-  const systemInstruction = buildSystemPrompt(ctx);
+  const today = await userToday(db, user.id);
+  let date =
+    clampDate(typeof body.date === 'string' ? body.date : undefined, today) ?? today;
 
   const proposals: Proposal[] = [];
   let reply = '';
+  let dateChanged = false;
+
+  const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
   try {
-    // The model may call several functions before it has anything to say, so the
-    // request / function-response exchange repeats until it produces prose.
+    // The conversation can retarget itself mid-flight when the user names another
+    // day, so context, history and prompt are all rebuilt around `date`.
+    let ctx = await getChatContext(db, user.id, date, today);
+    if (ctx.pillars.length === 0) {
+      return NextResponse.json(
+        { error: 'No pillars are available to the chat. Enable at least one on the Pillars page.' },
+        { status: 400 },
+      );
+    }
+
+    const history = await loadChatSession(db, user.id, date);
+    const contents: Content[] = [
+      ...history.slice(-MAX_HISTORY_MESSAGES),
+      { role: 'user', parts: [{ text: message }] },
+    ];
+
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       const response = await ai.models.generateContent({
         model: CHAT_MODEL,
         contents,
         config: {
-          systemInstruction,
+          systemInstruction: buildSystemPrompt(ctx),
           maxOutputTokens: CHAT_MAX_TOKENS,
           thinkingConfig: { thinkingLevel: CHAT_THINKING_LEVEL },
           tools: [{ functionDeclarations: CHAT_TOOLS }],
@@ -75,14 +89,10 @@ export async function POST(request: Request) {
       });
 
       if (response.text) reply += response.text;
-
       const calls = response.functionCalls ?? [];
 
-      // Echo the model's own turn back *verbatim*, straight from the candidate.
-      // Rebuilding the parts from `response.functionCalls` drops the
-      // `thoughtSignature` that Gemini 3 attaches to each call, and the next
-      // request is then rejected with "Function call is missing a
-      // thought_signature".
+      // Echo the model's own turn back verbatim — rebuilding the parts drops the
+      // `thoughtSignature` Gemini 3 attaches, and the next request is rejected.
       const modelContent = response.candidates?.[0]?.content;
       if (modelContent?.parts?.length) contents.push(modelContent);
 
@@ -92,6 +102,31 @@ export async function POST(request: Request) {
       for (const call of calls) {
         const name = call.name ?? '';
         const proposal = toProposal(name, call.args);
+
+        if (proposal?.kind === 'date') {
+          const next = clampDate(proposal.date, today);
+          if (!next) {
+            results.push({
+              functionResponse: {
+                name,
+                response: { error: 'That date is invalid or in the future. Pick a past day.' },
+              },
+            });
+            continue;
+          }
+          // Retarget: everything from here on is about the new day.
+          date = next;
+          dateChanged = true;
+          ctx = await getChatContext(db, user.id, date, today);
+          results.push({
+            functionResponse: {
+              name,
+              response: { status: `Now logging for ${date}. Continue with that day.` },
+            },
+          });
+          continue;
+        }
+
         if (proposal) proposals.push(proposal);
         results.push({
           functionResponse: {
@@ -105,27 +140,36 @@ export async function POST(request: Request) {
 
       contents.push({ role: 'user', parts: results });
     }
+
+    // A conversation belongs to the day it ended up about.
+    await saveChatSession(db, user.id, date, contents);
+
+    // Recomputed after any date change so the client's outstanding list is right.
+    const fresh = dateChanged ? await getChatContext(db, user.id, date, today) : ctx;
+    const unfilled = fresh.pillars
+      .filter((p) => (fresh.todayRatings[p.id] ?? 0) === 0)
+      .map((p) => ({ id: p.id, name: p.name, icon: p.icon }));
+
+    // Later proposals for the same pillar supersede earlier ones.
+    const deduped: Proposal[] = [];
+    for (const p of proposals) {
+      const key = p.kind === 'action' ? p.actionId : p.kind === 'date' ? 'date' : p.pillarId;
+      const at = deduped.findIndex(
+        (q) => (q.kind === 'action' ? q.actionId : q.kind === 'date' ? 'date' : q.pillarId) === key,
+      );
+      if (at >= 0) deduped[at] = p;
+      else deduped.push(p);
+    }
+
+    return NextResponse.json({
+      reply: reply.trim() || 'Noted.',
+      proposals: deduped,
+      date,
+      dateChanged,
+      unfilled,
+    });
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json({ error: `The model call failed: ${detail}` }, { status: 502 });
   }
-
-  await saveChatSession(db, user.id, date, contents);
-
-  // Later proposals for the same pillar supersede earlier ones, so the user sees
-  // one row per pillar rather than a running argument with itself.
-  const deduped: Proposal[] = [];
-  for (const p of proposals) {
-    const key = p.kind === 'action' ? p.actionId : p.pillarId;
-    const existing = deduped.findIndex(
-      (q) => (q.kind === 'action' ? q.actionId : q.pillarId) === key,
-    );
-    if (existing >= 0) deduped[existing] = p;
-    else deduped.push(p);
-  }
-
-  return NextResponse.json({
-    reply: reply.trim() || 'Noted.',
-    proposals: deduped,
-  });
 }

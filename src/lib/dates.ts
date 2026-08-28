@@ -88,8 +88,21 @@ export function dayLabel(iso: IsoDate): string {
   return DAY_LABELS[(fromIso(iso).getDay() + 6) % 7];
 }
 
+/**
+ * Dates are formatted in a fixed locale on purpose.
+ *
+ * `toLocaleDateString(undefined, …)` uses whatever locale the *runtime* has,
+ * which is not the same on the server (Node, en-US) as in the browser — so a
+ * date rendered on the server as "August 29" hydrated as "29 August" and React
+ * threw a mismatch. Pinning the locale makes the two agree.
+ */
+const DATE_LOCALE = 'en-GB';
+
 export function formatDate(iso: IsoDate, opts?: Intl.DateTimeFormatOptions): string {
-  return fromIso(iso).toLocaleDateString(undefined, opts ?? { month: 'short', day: 'numeric' });
+  return fromIso(iso).toLocaleDateString(
+    DATE_LOCALE,
+    opts ?? { month: 'short', day: 'numeric' },
+  );
 }
 
 export function formatRange(start: IsoDate, end: IsoDate): string {

@@ -28,12 +28,15 @@ export async function getChattablePillars(db: DB, userId: string): Promise<UserP
 export async function getChatContext(
   db: DB,
   userId: string,
+  /** The day being logged. */
   date: IsoDate,
+  /** The user's real today, for resolving "yesterday" and for recency stats. */
+  today: IsoDate = date,
 ): Promise<ChatContext> {
   const [pillars, actions, entries, completedActionIds, profile, quests] = await Promise.all([
     getChattablePillars(db, userId),
     getMicroActions(db, userId),
-    getEntries(db, userId, addDays(date, -89), date),
+    getEntries(db, userId, addDays(date, -89), today > date ? today : date),
     getActionLogDates(db, userId, date),
     getProfile(db, userId),
     getQuests(db, userId, weekStart(date)),
@@ -57,6 +60,7 @@ export async function getChatContext(
     completedActionIds,
     quests,
     date,
+    today,
     displayName: profile?.display_name ?? null,
   };
 }

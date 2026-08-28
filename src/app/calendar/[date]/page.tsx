@@ -60,7 +60,14 @@ export default async function DayPage({
               : `${daysAgo} days ago — filling this in counts, and is marked as late`
         }
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {/* The chat can log any day, so it is offered from every day page. */}
+            <Link
+              href={`/chat?d=${date}`}
+              className="rounded-lg bg-gold-500/15 px-3 py-1.5 text-sm font-medium text-gold-400 ring-1 ring-gold-500/30 transition-colors hover:bg-gold-500/25"
+            >
+              💬 Talk it through
+            </Link>
             <Link
               href={`/calendar/${addDays(date, -1)}`}
               className="rounded-lg bg-ink-800 px-3 py-1.5 text-sm text-ink-200 hover:bg-ink-700"
